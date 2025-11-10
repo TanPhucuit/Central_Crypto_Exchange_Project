@@ -99,7 +99,7 @@ class User
     public function getMerchants(): array
     {
         $stmt = $this->db->prepare("
-            SELECT user_id, username, full_name, email, created_at 
+            SELECT user_id, username, fullname, email, usdt_price, role, created_at 
             FROM users 
             WHERE role = 'merchant'
             ORDER BY username ASC

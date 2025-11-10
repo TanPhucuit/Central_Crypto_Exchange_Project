@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { FiUser, FiLock, FiShield } from 'react-icons/fi';
 import { updateProfile } from '../../features/auth/authSlice';
 import { useAuth } from '../../hooks/useAuth';
@@ -7,7 +7,7 @@ import { userAPI } from '../../services/api';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
-  const { user, userId } = useAuth();
+  const { userId } = useAuth();
   const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
@@ -32,6 +32,7 @@ const ProfilePage = () => {
     if (userId) {
       loadProfileData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const loadProfileData = async () => {

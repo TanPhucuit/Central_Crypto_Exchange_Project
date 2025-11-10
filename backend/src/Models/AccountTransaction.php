@@ -24,7 +24,7 @@ class AccountTransaction
             LIMIT {$limit}
         ");
         $stmt->execute([$accountNumber, $accountNumber]);
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function findById(int $transactionId): ?array
@@ -35,7 +35,7 @@ class AccountTransaction
             LIMIT 1
         ");
         $stmt->execute([$transactionId]);
-        $transaction = $stmt->fetch();
+        $transaction = $stmt->fetch(PDO::FETCH_ASSOC);
         return $transaction ?: null;
     }
 
@@ -48,9 +48,9 @@ class AccountTransaction
         ");
         
         $success = $stmt->execute([
-            $data['source_account_number'],
-            $data['target_account_number'],
-            $data['transaction_amount']
+            $data['source_account'] ?? $data['source_account_number'],
+            $data['destination_account_number'] ?? $data['target_account_number'],
+            $data['amount'] ?? $data['transaction_amount']
         ]);
 
         return $success ? (int)$this->db->lastInsertId() : null;
@@ -64,7 +64,7 @@ class AccountTransaction
             ORDER BY ts DESC
             LIMIT {$limit}
         ");
-        $stmt->execute([]);
-        return $stmt->fetchAll();
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

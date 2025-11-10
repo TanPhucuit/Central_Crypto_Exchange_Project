@@ -22,7 +22,19 @@ class Wallet
             ORDER BY type, created_at DESC
         ");
         $stmt->execute([$userId]);
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getByUserIdAndSymbol(int $userId, string $symbol): ?array
+    {
+        $stmt = $this->db->prepare("
+            SELECT * FROM wallets 
+            WHERE user_id = ? AND symbol = ? 
+            LIMIT 1
+        ");
+        $stmt->execute([$userId, $symbol]);
+        $wallet = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $wallet ?: null;
     }
 
     public function getByUserIdAndType(int $userId, string $type): ?array
@@ -33,7 +45,7 @@ class Wallet
             LIMIT 1
         ");
         $stmt->execute([$userId, $type]);
-        $wallet = $stmt->fetch();
+        $wallet = $stmt->fetch(PDO::FETCH_ASSOC);
         return $wallet ?: null;
     }
 
@@ -41,18 +53,18 @@ class Wallet
     {
         $stmt = $this->db->prepare("SELECT * FROM wallets WHERE wallet_id = ? LIMIT 1");
         $stmt->execute([$walletId]);
-        $wallet = $stmt->fetch();
+        $wallet = $stmt->fetch(PDO::FETCH_ASSOC);
         return $wallet ?: null;
     }
 
-    public function updateBalance(int $walletId, float $amount): bool
+    public function updateBalance(int $walletId, float $newBalance): bool
     {
         $stmt = $this->db->prepare("
             UPDATE wallets 
-            SET balance = balance + ? 
+            SET balance = ? 
             WHERE wallet_id = ?
         ");
-        return $stmt->execute([$amount, $walletId]);
+        return $stmt->execute([$newBalance, $walletId]);
     }
 
     public function setBalance(int $walletId, float $balance): bool
@@ -65,14 +77,19 @@ class Wallet
         return $stmt->execute([$balance, $walletId]);
     }
 
-    public function create(int $userId, string $type, float $balance = 0): ?int
+    public function create(array $data): ?int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO wallets (user_id, type, balance)
-            VALUES (?, ?, ?)
+            INSERT INTO wallets (user_id, symbol, balance, type)
+            VALUES (?, ?, ?, ?)
         ");
         
-        $success = $stmt->execute([$userId, $type, $balance]);
+        $success = $stmt->execute([
+            $data['user_id'],
+            $data['symbol'],
+            $data['balance'] ?? 0,
+            $data['type'] ?? 'spot'
+        ]);
         return $success ? (int)$this->db->lastInsertId() : null;
     }
 
@@ -89,7 +106,7 @@ class Wallet
             WHERE wallet_id = ?
         ");
         $stmt->execute([$walletId]);
-        $wallet['properties'] = $stmt->fetchAll();
+        $wallet['properties'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return $wallet;
     }

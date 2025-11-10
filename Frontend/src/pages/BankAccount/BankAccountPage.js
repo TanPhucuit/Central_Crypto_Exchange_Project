@@ -33,6 +33,7 @@ const BankAccountPage = () => {
     if (userId) {
       loadBankAccounts();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
   
   const loadBankAccounts = async () => {

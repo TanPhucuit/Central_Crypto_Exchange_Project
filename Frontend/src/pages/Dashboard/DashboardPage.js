@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
 import { FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity, FiDownload } from 'react-icons/fi';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { walletAPI, tradingAPI, dashboardAPI } from '../../services/api';
+import { tradingAPI, dashboardAPI } from '../../services/api';
 import useAuth from '../../hooks/useAuth';
 import './DashboardPage.css';
 
 const DashboardPage = () => {
   const { user, userId } = useAuth();
-  const [portfolioData, setPortfolioData] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,22 +17,12 @@ const DashboardPage = () => {
     profitLoss: 0,
     profitLossPercent: 0,
   });
-  
-  // Crypto name mapping
-  const cryptoNames = {
-    BTC: 'Bitcoin',
-    ETH: 'Ethereum',
-    USDT: 'Tether',
-    BNB: 'Binance Coin',
-    SOL: 'Solana',
-    XRP: 'Ripple',
-    ADA: 'Cardano',
-  };
 
   useEffect(() => {
     if (userId) {
       loadDashboardData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const loadDashboardData = async () => {

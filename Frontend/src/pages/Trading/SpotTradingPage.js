@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { FiTrendingUp } from 'react-icons/fi';
 import LivePriceChart from '../../components/LivePriceChart/LivePriceChart';
 import { useAuth } from '../../hooks/useAuth';
@@ -40,6 +39,7 @@ const SpotTradingPage = () => {
       loadWalletBalances();
       loadOpenOrders();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, selectedPair]);
 
   const loadWalletBalances = async () => {

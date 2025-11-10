@@ -175,12 +175,27 @@ export const p2pAPI = {
   },
 
   // Create new P2P order
-  createOrder: async (userId, type, unitNumbers, merchantId = null) => {
-    const response = await api.post('/p2p/orders', {
-      user_id: userId,
-      type: type, // 'buy' or 'sell'
-      unit_numbers: unitNumbers,
-      merchant_id: merchantId,
+  createOrder: async (orderData) => {
+    const response = await api.post('/p2p/orders', orderData);
+    return response.data;
+  },
+
+  // Cancel order
+  cancelOrder: async (orderId, userId) => {
+    const response = await api.post(`/p2p/orders/${orderId}/cancel?user_id=${userId}`);
+    return response.data;
+  },
+
+  // Transfer payment for order
+  transferPayment: async (orderId, paymentData) => {
+    const response = await api.post(`/p2p/orders/${orderId}/transfer`, paymentData);
+    return response.data;
+  },
+
+  // Merchant confirms and releases USDT
+  confirmAndRelease: async (orderId, merchantId) => {
+    const response = await api.post(`/p2p/orders/${orderId}/confirm`, {
+      merchant_id: merchantId
     });
     return response.data;
   },
