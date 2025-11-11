@@ -114,4 +114,68 @@ class P2POrder
         ");
         return $stmt->execute([$merchantId, $orderId]);
     }
+
+    public function getTotalOrdersByMerchant(int $merchantId): int
+    {
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) as total 
+            FROM p2p_orders 
+            WHERE merchant_id = ?
+        ");
+        $stmt->execute([$merchantId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int)($result['total'] ?? 0);
+    }
+
+    public function getCompletedOrdersByMerchant(int $merchantId): int
+    {
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) as total 
+            FROM p2p_orders 
+            WHERE merchant_id = ? AND state = 'filled'
+        ");
+        $stmt->execute([$merchantId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int)($result['total'] ?? 0);
+    }
+
+    public function getTotalVolumeByMerchant(int $merchantId): float
+    {
+        $stmt = $this->db->prepare("
+            SELECT SUM(unit_numbers) as total_volume 
+            FROM p2p_orders 
+            WHERE merchant_id = ?
+        ");
+        $stmt->execute([$merchantId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (float)($result['total_volume'] ?? 0);
+    }
+
+    public function getOrdersByMerchant(int $merchantId, int $limit = 100): array
+    {
+        $limit = (int)$limit;
+        $stmt = $this->db->prepare("
+            SELECT 
+                p.order_id,
+                p.user_id,
+                p.merchant_id,
+                p.type,
+                p.unit_numbers as amount,
+                p.state,
+                p.transaction_id,
+                p.ts as created_at,
+                u.username as user_username,
+                u.email as user_email,
+                COALESCE(p.unit_numbers * m.usdt_price, 0) as total
+            FROM p2p_orders p
+            LEFT JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN users m ON p.merchant_id = m.user_id
+            WHERE p.merchant_id = ?
+            ORDER BY p.ts DESC
+            LIMIT {$limit}
+        ");
+        $stmt->execute([$merchantId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
+

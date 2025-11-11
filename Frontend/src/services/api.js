@@ -233,6 +233,46 @@ export const bankAPI = {
   },
 };
 
+// ============= MERCHANT ENDPOINTS =============
+export const merchantAPI = {
+  // Get merchant dashboard stats
+  getDashboardStats: async (merchantId) => {
+    const userId = merchantId || localStorage.getItem('user_id');
+    const response = await api.get(`/merchant/dashboard/stats?merchant_id=${userId}`);
+    return response.data;
+  },
+
+  // Get all merchant's orders
+  getOrders: async (merchantId) => {
+    const userId = merchantId || localStorage.getItem('user_id');
+    const response = await api.get(`/merchant/orders?merchant_id=${userId}`);
+    return response.data;
+  },
+
+  // Get merchant's transactions
+  getTransactions: async (merchantId) => {
+    const userId = merchantId || localStorage.getItem('user_id');
+    const response = await api.get(`/merchant/transactions?merchant_id=${userId}`);
+    return response.data;
+  },
+
+  // Get merchant's bank accounts
+  getBankAccounts: async (merchantId) => {
+    const userId = merchantId || localStorage.getItem('user_id');
+    const response = await api.get(`/merchant/bank-accounts?merchant_id=${userId}`);
+    return response.data;
+  },
+
+  // Confirm and release USDT (alias to p2pAPI.confirmAndRelease)
+  confirmAndRelease: async (orderId, merchantId) => {
+    const userId = merchantId || localStorage.getItem('user_id');
+    const response = await api.post(`/p2p/orders/${orderId}/confirm`, {
+      merchant_id: userId
+    });
+    return response.data;
+  },
+};
+
 // ============= DASHBOARD ENDPOINTS =============
 export const dashboardAPI = {
   // Get dashboard summary with calculated assets

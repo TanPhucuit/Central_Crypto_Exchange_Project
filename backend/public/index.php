@@ -43,6 +43,7 @@ $routes = [
     __DIR__ . '/../src/Routes/p2p.php',
     __DIR__ . '/../src/Routes/bank.php',
     __DIR__ . '/../src/Routes/dashboard.php',
+    __DIR__ . '/../src/Routes/merchant.php',
 ];
 
 foreach ($routes as $routeFile) {

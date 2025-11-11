@@ -23,6 +23,9 @@ import TransactionHistoryPage from './pages/Transaction/TransactionHistoryPage';
 
 // Merchant Pages
 import MerchantDashboardPage from './pages/Merchant/MerchantDashboardPage';
+import MerchantP2PPage from './pages/Merchant/MerchantP2PPage';
+import MerchantBankPage from './pages/Merchant/MerchantBankPage';
+import MerchantWalletPage from './pages/Merchant/MerchantWalletPage';
 
 function App() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -133,6 +136,30 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={['merchant']}>
               <MerchantDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/merchant/p2p"
+          element={
+            <ProtectedRoute allowedRoles={['merchant']}>
+              <MerchantP2PPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/merchant/bank"
+          element={
+            <ProtectedRoute allowedRoles={['merchant']}>
+              <MerchantBankPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/merchant/wallet"
+          element={
+            <ProtectedRoute allowedRoles={['merchant']}>
+              <MerchantWalletPage />
             </ProtectedRoute>
           }
         />

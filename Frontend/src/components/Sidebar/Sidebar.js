@@ -28,9 +28,9 @@ const Sidebar = () => {
   ];
 
   const merchantMenuItems = [
-    { path: '/merchant/dashboard', icon: FiHome, label: 'Dashboard' },
-    { path: '/trading/p2p', icon: FiLayers, label: 'Quản lý P2P' },
-    { path: '/wallet', icon: FiDollarSign, label: 'Nguồn vốn' },
+    { path: '/merchant/dashboard', icon: FiHome, label: 'Dashboard & P2P' },
+    { path: '/merchant/bank', icon: FiCreditCard, label: 'Tài khoản NH' },
+    { path: '/merchant/wallet', icon: FiDollarSign, label: 'Ví của tôi' },
   ];
 
   const menuItems = user?.role === 'merchant' ? merchantMenuItems : userMenuItems;

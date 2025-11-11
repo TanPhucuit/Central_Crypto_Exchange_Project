@@ -27,14 +27,38 @@ class Wallet
 
     public function getByUserIdAndSymbol(int $userId, string $symbol): ?array
     {
+        // Find a wallet for the user (prefer fund -> spot -> future)
         $stmt = $this->db->prepare("
             SELECT * FROM wallets 
-            WHERE user_id = ? AND symbol = ? 
+            WHERE user_id = ?
+            ORDER BY FIELD(type, 'fund', 'spot', 'future')
             LIMIT 1
         ");
-        $stmt->execute([$userId, $symbol]);
+        $stmt->execute([$userId]);
         $wallet = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $wallet ?: null;
+        if (!$wallet) {
+            return null;
+        }
+
+        // Lookup crypto balance from properties table
+        $propStmt = $this->db->prepare("
+            SELECT unit_number FROM properties 
+            WHERE wallet_id = ? AND symbol = ?
+            LIMIT 1
+        ");
+        $propStmt->execute([$wallet['wallet_id'], $symbol]);
+        $prop = $propStmt->fetch(PDO::FETCH_ASSOC);
+
+        // Prefer properties.unit_number for crypto balances. If missing, fall back
+        // to wallets.balance (some test data may store crypto amount there).
+        if (isset($prop['unit_number'])) {
+            $wallet['balance'] = (float)$prop['unit_number'];
+        } else {
+            // fallback to wallet balance if present (assume it represents crypto units)
+            $wallet['balance'] = isset($wallet['balance']) ? (float)$wallet['balance'] : 0;
+        }
+        $wallet['symbol'] = $symbol;
+        return $wallet;
     }
 
     public function getByUserIdAndType(int $userId, string $type): ?array
@@ -67,6 +91,28 @@ class Wallet
         return $stmt->execute([$newBalance, $walletId]);
     }
 
+    /**
+     * Update crypto unit number in properties table for a specific symbol
+     */
+    public function updatePropertyBalance(int $walletId, string $symbol, float $newUnitNumber): bool
+    {
+        // Try to update existing property
+        $stmt = $this->db->prepare(
+            "UPDATE properties SET unit_number = ? WHERE wallet_id = ? AND symbol = ?"
+        );
+        $updated = $stmt->execute([$newUnitNumber, $walletId, $symbol]);
+
+        // If no rows affected, try insert
+        if ($stmt->rowCount() === 0) {
+            $ins = $this->db->prepare(
+                "INSERT INTO properties (wallet_id, symbol, average_buy_price, unit_number) VALUES (?, ?, ?, ?)"
+            );
+            return $ins->execute([$walletId, $symbol, 0, $newUnitNumber]);
+        }
+
+        return $updated;
+    }
+
     public function setBalance(int $walletId, float $balance): bool
     {
         $stmt = $this->db->prepare("
@@ -79,18 +125,37 @@ class Wallet
 
     public function create(array $data): ?int
     {
+        // Insert wallet record according to schema (user_id, type, balance)
         $stmt = $this->db->prepare("
-            INSERT INTO wallets (user_id, symbol, balance, type)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO wallets (user_id, type, balance)
+            VALUES (?, ?, ?)
         ");
-        
+
         $success = $stmt->execute([
             $data['user_id'],
-            $data['symbol'],
-            $data['balance'] ?? 0,
-            $data['type'] ?? 'spot'
+            $data['type'] ?? 'spot',
+            $data['balance'] ?? 0
         ]);
-        return $success ? (int)$this->db->lastInsertId() : null;
+
+        if (!$success) return null;
+
+        $walletId = (int)$this->db->lastInsertId();
+
+        // If symbol provided, create a properties entry for the crypto balance
+        if (!empty($data['symbol'])) {
+            $propStmt = $this->db->prepare("
+                INSERT INTO properties (wallet_id, symbol, average_buy_price, unit_number)
+                VALUES (?, ?, ?, ?)
+            ");
+            $propStmt->execute([
+                $walletId,
+                $data['symbol'],
+                $data['average_buy_price'] ?? 0,
+                $data['balance'] ?? 0
+            ]);
+        }
+
+        return $walletId;
     }
 
     // Get wallet with properties (crypto holdings)

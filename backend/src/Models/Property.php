@@ -40,11 +40,11 @@ class Property
     public function create(int $walletId, string $symbol, float $averageBuyPrice = 0, float $unitNumbers = 0): bool
     {
         $stmt = $this->db->prepare("
-            INSERT INTO properties (wallet_id, symbol, average_buy_price, unit_numbers)
+            INSERT INTO properties (wallet_id, symbol, average_buy_price, unit_number)
             VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 average_buy_price = VALUES(average_buy_price),
-                unit_numbers = VALUES(unit_numbers)
+                unit_number = VALUES(unit_number)
         ");
         
         return $stmt->execute([$walletId, $symbol, $averageBuyPrice, $unitNumbers]);
@@ -54,7 +54,7 @@ class Property
     {
         $stmt = $this->db->prepare("
             UPDATE properties 
-            SET unit_numbers = unit_numbers + ?
+            SET unit_number = unit_number + ?
             WHERE wallet_id = ? AND symbol = ?
         ");
         return $stmt->execute([$delta, $walletId, $symbol]);

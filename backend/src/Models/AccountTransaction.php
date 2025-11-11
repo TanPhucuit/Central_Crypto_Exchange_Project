@@ -67,4 +67,41 @@ class AccountTransaction
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Check if a transaction exists for a P2P order
+     * Returns transaction data if exists, null otherwise
+     */
+    public function getTransactionByOrderId(int $orderId): ?array
+    {
+        $stmt = $this->db->prepare("
+            SELECT * FROM account_transactions 
+            WHERE order_id = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$orderId]);
+        $transaction = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $transaction ?: null;
+    }
+
+    /**
+     * Get all transactions for a merchant's bank accounts
+     */
+    public function getByAccountNumbers(array $accountNumbers): array
+    {
+        if (empty($accountNumbers)) {
+            return [];
+        }
+        
+        $placeholders = str_repeat('?,', count($accountNumbers) - 1) . '?';
+        $stmt = $this->db->prepare("
+            SELECT * FROM account_transactions 
+            WHERE source_account_number IN ($placeholders) 
+               OR target_account_number IN ($placeholders)
+            ORDER BY ts DESC
+        ");
+        $params = array_merge($accountNumbers, $accountNumbers);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }

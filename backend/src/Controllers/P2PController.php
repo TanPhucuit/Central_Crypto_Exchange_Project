@@ -202,7 +202,7 @@ class P2PController
         
         // Get merchant USDT wallet
         $merchantWallet = $walletModel->getByUserIdAndSymbol($merchantId, 'USDT');
-        if (!$merchantWallet || $merchantWallet['balance'] < $order['unit_numbers']) {
+        if (!$merchantWallet || floatval($merchantWallet['balance']) < floatval($order['unit_numbers'])) {
             return Response::error($response, 'Insufficient merchant USDT balance', 400);
         }
 
@@ -217,13 +217,17 @@ class P2PController
             $userWallet = $walletModel->getByUserIdAndSymbol($order['user_id'], 'USDT');
         }
 
-        // Deduct from merchant
-        $newMerchantBalance = $merchantWallet['balance'] - $order['unit_numbers'];
-        $walletModel->updateBalance($merchantWallet['wallet_id'], $newMerchantBalance);
+    // Deduct from merchant (crypto units stored in properties)
+    $newMerchantBalance = floatval($merchantWallet['balance']) - floatval($order['unit_numbers']);
+    $walletModel->updatePropertyBalance($merchantWallet['wallet_id'], 'USDT', $newMerchantBalance);
+    // Also update wallet.balance for spot wallet display/consistency
+    $walletModel->updateBalance($merchantWallet['wallet_id'], $newMerchantBalance);
 
-        // Add to user
-        $newUserBalance = $userWallet['balance'] + $order['unit_numbers'];
-        $walletModel->updateBalance($userWallet['wallet_id'], $newUserBalance);
+    // Add to user (crypto units stored in properties)
+    $newUserBalance = floatval($userWallet['balance']) + floatval($order['unit_numbers']);
+    $walletModel->updatePropertyBalance($userWallet['wallet_id'], 'USDT', $newUserBalance);
+    // Also update wallet.balance for spot wallet display/consistency
+    $walletModel->updateBalance($userWallet['wallet_id'], $newUserBalance);
 
         // Update order state to filled
         $p2pModel->updateState($orderId, 'filled');
