@@ -1,8 +1,14 @@
+body {
+  background-color: #000;
+  color: #fff;
+}
+
 .home-page {
   width: 100%;
-  margin: 0;
+  margin: 0 auto; /* Center the page */
   padding: 0;
   overflow-x: hidden;
+  max-width: 1200px; /* Limit the width for better balance */
 }
 
 .hero-section {
@@ -13,7 +19,7 @@
   text-align: center;
   position: relative;
   overflow: hidden;
-  padding: 120px 40px 80px 40px;
+  padding: 120px 40px; /* Reduce padding for better alignment */
   margin: 0 auto;
   max-width: 100%;
   box-sizing: border-box;
@@ -735,34 +741,304 @@
   margin-bottom: var(--spacing-xl);
 }
 
-/* Additional animations */
-.trust-indicators {
+/* Tối ưu tab */
+.tabs {
   display: flex;
   justify-content: center;
-  gap: var(--spacing-xl);
-  margin-top: var(--spacing-xl);
-  animation: fadeInUp 1.4s ease 0.8s both;
+  margin-bottom: 16px;
 }
 
-.trust-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
+.tabs button {
+  padding: 8px 16px;
+  margin: 0 8px;
   font-size: 14px;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background-color: #333;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
 
-.trust-item:hover {
-  color: var(--text-primary);
-  transform: translateY(-2px);
+.tabs button.active {
+  background-color: #007bff;
+  color: #fff;
+  border-color: #007bff;
 }
 
-.trust-icon {
-  color: var(--success-color);
-  font-size: 20px;
+.tabs button:hover {
+  background-color: #e6e6e6;
 }
+
+.tab-content {
+  padding: 16px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background-color: #222;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Chỉnh sửa giao diện nút mua/bán, long/short */
+.side-switch button {
+  width: 100px; /* Rút ngắn chiều dài nút */
+  height: 40px; /* Giảm chiều cao nút */
+  font-size: 14px;
+  margin: 4px;
+  border-radius: 4px;
+}
+
+.side-switch .buy {
+  background-color: #28a745;
+  color: white;
+}
+
+.side-switch .sell {
+  background-color: #dc3545;
+  color: white;
+}
+
+/* Hiệu ứng cho các ô chọn coin */
+.coin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.coin-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.coin-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.coin-card.active {
+  border-color: #007bff;
+  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.5);
+}
+
+/* Kéo dãn khung biểu đồ ra tối đa */
+.chart-card {
+  width: 100%;
+  height: auto;
+  margin-bottom: 16px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Chỉ chỉnh sửa khung giao dịch phía dưới */
+.order-panel-binance, .futures-order-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  max-width: 320px; /* Rút ngắn chiều dài tổng thể của khung */
+  margin: 0 auto; /* Cân đối giữa màn hình */
+  background-color: #222;
+}
+
+/* Full-width trading container to allow chart to stretch beyond centered tab-content */
+.trading-full-width {
+  width: 100%;
+  max-width: 1400px; /* allow wide charts */
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Ensure chart-card for trading pages uses dark background if not overridden inline */
+.spot-trading-page .chart-card,
+.futures-trading-page .chart-card {
+  background-color: #000 !important;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #fff;
+}
+
+/* Compact vertical order panel styles */
+.order-panel-compact {
+  width: 320px;
+  background-color: #111;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 0 auto 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.order-panel-compact .wallet-banner {
+  text-align: center;
+}
+
+.side-switch-compact {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.side-switch-compact button {
+  flex: 1 1 120px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-buy {
+  background: transparent;
+  color: #cfd8dc;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.btn-sell {
+  background: transparent;
+  color: #cfd8dc;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.btn-buy.active {
+  background: linear-gradient(180deg,#00c46b,#00a85a);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(0,196,107,0.18);
+}
+
+.btn-sell.active {
+  background: linear-gradient(180deg,#ff5b5b,#f03b3b);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(240,59,59,0.18);
+}
+
+.btn-trade {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+}
+
+.order-panel-compact .order-field input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: transparent;
+  color: #fff;
+}
+
+.order-summary.compact {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #cfd8dc;
+}
+
+.balance-value { font-size: 18px; color: #fff; margin: 0; }
+
+/* Tabs above chart: make sure tabs align with full-width chart */
+.spot-trading-page > .tabs, .futures-trading-page > .tabs {
+  max-width: 1400px;
+  margin: 0 auto 12px;
+  padding: 0 16px;
+}
+
+.order-panel-binance .wallet-banner, .futures-order-panel .wallet-banner {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.order-field, .lever-field {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.order-field input, .lever-field input {
+  width: calc(100% - 16px);
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Tối ưu danh sách tài sản và lịch sử giao dịch */
+.asset-row, .order-history-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.asset-row:last-child, .order-history-row:last-child {
+  border-bottom: none;
+}
+
+.asset-row strong, .order-history-row strong {
+  font-weight: bold;
+}
+
+.asset-row .text-secondary, .order-history-row .text-secondary {
+  color: #6c757d;
+  font-size: 12px;
+}
+
+/* Improved styles for assets, history and positions */
+.assets-tab .asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asset-row {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.order-history-card {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.04);
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.order-history-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 6px;
+  align-items: center;
+}
+
+.positions-list .position-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.positions-list .position-row:last-child { border-bottom: none; }
+
+.position-actions button { padding: 8px 10px; border-radius: 6px; }
 
 @media (max-width: 768px) {
   .hero-section {

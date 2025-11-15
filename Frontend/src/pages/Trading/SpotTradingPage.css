@@ -447,26 +447,46 @@
   letter-spacing: 0.5px;
 }
 
-.btn-buy {
+/* Trade action buttons: neutral by default; colored only when .active is present.
+   Use more specific selectors so these rules win over other global styles. */
+.order-panel .btn-buy,
+.order-panel .btn-sell,
+.order-panel-compact .btn-buy,
+.order-panel-compact .btn-sell,
+.side-switch button.btn-buy,
+.side-switch button.btn-sell {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.order-panel .btn-buy.active,
+.side-switch button.btn-buy.active {
   background: var(--success-color);
   color: white;
+  border-color: var(--success-color);
+  box-shadow: var(--shadow-glow-success);
 }
 
-.btn-buy:hover {
-  background: #04c296;
+.order-panel .btn-buy.active:hover,
+.side-switch button.btn-buy.active:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(5, 196, 107, 0.3);
 }
 
-.btn-sell {
+.order-panel .btn-sell.active,
+.side-switch button.btn-sell.active {
   background: var(--danger-color);
   color: white;
+  border-color: var(--danger-color);
+  box-shadow: var(--shadow-glow-danger);
 }
 
-.btn-sell:hover {
-  background: #f33636;
+.order-panel .btn-sell.active:hover,
+.side-switch button.btn-sell.active:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(255, 56, 56, 0.3);
 }
 
 .chart-section {

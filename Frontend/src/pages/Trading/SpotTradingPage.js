@@ -48,6 +48,7 @@ const SpotTradingPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showAssets, setShowAssets] = useState(false);
+  const [activeTab, setActiveTab] = useState('trading');
 
   const baseAsset = useMemo(() => selectedPair.split('/')[0], [selectedPair]);
   const selectedMeta = useMemo(
@@ -225,10 +226,11 @@ const SpotTradingPage = () => {
       setError(null);
 
       const quantity = parseFloat(amount);
+      const symbolToSend = baseAsset; // send base asset symbol (e.g., 'BTC') to match properties table
       if (side === 'buy') {
-        await tradingAPI.spotBuy(userId, spotWalletId, selectedPair, quantity, activePrice);
+        await tradingAPI.spotBuy(userId, spotWalletId, symbolToSend, quantity, activePrice);
       } else {
-        await tradingAPI.spotSell(userId, spotWalletId, selectedPair, quantity, activePrice);
+        await tradingAPI.spotSell(userId, spotWalletId, symbolToSend, quantity, activePrice);
       }
 
       setSuccess(side === 'buy' ? 'Đặt lệnh mua thành công' : 'Đặt lệnh bán thành công');
@@ -236,7 +238,8 @@ const SpotTradingPage = () => {
       loadSpotHoldings(spotWalletId);
       loadOpenOrders(spotWalletId);
     } catch (err) {
-      setError(err?.message || 'Không thể thực hiện lệnh. Vui lòng thử lại');
+      const msg = err?.message || err?.error || (err && typeof err === 'string' ? err : null) || 'Không thể thực hiện lệnh. Vui lòng thử lại';
+      setError(msg);
     } finally {
       setLoading(false);
       setTimeout(() => setSuccess(null), 4000);
@@ -284,78 +287,144 @@ const SpotTradingPage = () => {
     );
   });
 
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'assets':
+        return (
+          <div className="tab-content assets-tab">
+            {holdingsLoading ? (
+              <p>Đang tải dữ liệu tài sản...</p>
+            ) : holdings.length === 0 ? (
+              <p className="text-secondary">Không có tài sản nào trong ví Spot.</p>
+            ) : (
+              <div className="asset-list">{assetRows}</div>
+            )}
+          </div>
+        );
+      case 'history':
+        return (
+          <div className="tab-content history-tab">
+            {openOrders.length === 0 ? (
+              <p className="text-secondary">Không có lịch sử giao dịch nào.</p>
+            ) : (
+              <div className="order-history-card glass-card">
+                <div className="card-header">
+                  <h3>Lịch sử giao dịch</h3>
+                </div>
+                <div className="order-history-list">
+                  {openOrders.map((order) => renderOrderRow(order))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case 'trading':
+      default:
+        return (
+          <div>
+            <div className="coin-grid">
+              {SUPPORTED_PAIRS.map((pair) => (
+                <div
+                  key={pair.symbol}
+                  className={`coin-card ${selectedPair === pair.symbol ? 'active' : ''}`}
+                  onClick={() => setSelectedPair(pair.symbol)}
+                >
+                  <h3>{pair.name}</h3>
+                  <p>{formatNumber(priceTickers[pair.symbol]?.price || 0)} USDT</p>
+                </div>
+              ))}
+            </div>
+            <div className="chart-card" style={{ width: '100%', backgroundColor: '#000' }}>
+              <LivePriceChart symbol={selectedPair.replace('/', '')} height={520} />
+            </div>
+            <div className="order-panel-binance">
+              {/* Chỉ chỉnh sửa khung giao dịch phía dưới */}
+              <div className="wallet-banner">
+                <p>Số dư khả dụng</p>
+                {side === 'buy' ? (
+                  <h2>{formatNumber(usdtBalance)} USDT</h2>
+                ) : (
+                  <h2>{formatNumber(coinBalance, 6)} {baseAsset}</h2>
+                )}
+              </div>
+              <div className="order-field">
+                <label>Số lượng</label>
+                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              </div>
+              <button className="btn btn-primary">Mua ngay</button>
+            </div>
+          </div>
+        );
+    }
+  };
+
   return (
     <div className="spot-trading-page">
-      <div className="page-header">
-        <div>
-          <h1>Giao dịch Spot</h1>
-          <p className="text-secondary">Lệnh thị trường với dữ liệu giá real-time từ Binance</p>
-        </div>
-        <button className="btn btn-secondary" onClick={() => setShowAssets(true)}>
-          <FiPieChart /> Tài sản của tôi
+      <div className="tabs">
+        <button
+          className={activeTab === 'trading' ? 'active' : ''}
+          onClick={() => setActiveTab('trading')}
+        >
+          Giao dịch
+        </button>
+        <button
+          className={activeTab === 'assets' ? 'active' : ''}
+          onClick={() => setActiveTab('assets')}
+        >
+          Tài sản
+        </button>
+        <button
+          className={activeTab === 'history' ? 'active' : ''}
+          onClick={() => setActiveTab('history')}
+        >
+          Lịch sử
         </button>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
+      {activeTab === 'trading' ? (
+        /* Full-width trading layout so chart can stretch */
+        <div className="trading-full-width">
+          <div className="coin-grid">
+            {SUPPORTED_PAIRS.map((pair) => (
+              <div
+                key={pair.symbol}
+                className={`coin-card ${selectedPair === pair.symbol ? 'active' : ''}`}
+                onClick={() => setSelectedPair(pair.symbol)}
+              >
+                <h3>{pair.name}</h3>
+                <p>{formatNumber(priceTickers[pair.symbol]?.price || 0)} USDT</p>
+              </div>
+            ))}
+          </div>
 
-      <div className="spot-layout">
-        <div className="spot-left">
-          <div className="coins-section glass-card">
-            <h3>Cặp giao dịch</h3>
-            <div className="coins-grid">
-              {SUPPORTED_PAIRS.map((pair) => {
-                const ticker = priceTickers[pair.symbol];
-                const isActive = pair.symbol === selectedPair;
-                return (
-                  <div
-                    key={pair.symbol}
-                    className={`coin-card ${isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedPair(pair.symbol)}
-                  >
-                    <div className="coin-header">
-                      <span className="coin-icon">{pair.icon}</span>
-                      <div>
-                        <strong>{pair.symbol}</strong>
-                        <p className="text-secondary">{pair.name}</p>
-                      </div>
-                    </div>
-                    <div className="coin-price">
-                      ${formatNumber(ticker?.price || pair.price || 0, 2)}
-                    </div>
-                    <span className={`coin-change ${ticker?.changePercent >= 0 ? 'positive' : 'negative'}`}>
-                      {ticker?.changePercent ? `${ticker.changePercent.toFixed(2)}%` : '--'}
-                    </span>
-                  </div>
-                );
-              })}
+          <div className="chart-wrapper" style={{ width: '100%' }}>
+            <div className="chart-card" style={{ width: '100%', backgroundColor: '#000' }}>
+              <LivePriceChart symbol={selectedPair.replace('/', '')} height={520} />
             </div>
           </div>
 
-          <div className="order-panel-binance">
-            <div className="order-panel-header">
-              <div>
-                <p className="text-secondary">Giá hiện tại</p>
-                <h2>${formatNumber(activePrice || 0, activePrice > 10 ? 2 : 4)}</h2>
-              </div>
-              <div className="panel-stats">
-                <span>Cao 24h: {formatNumber(activeTicker?.high || 0)}</span>
-                <span>Thấp 24h: {formatNumber(activeTicker?.low || 0)}</span>
-              </div>
+          <div className="order-panel-compact">{/* compact vertical order panel */}
+            <div className="wallet-banner">
+              <p className="text-secondary">Số dư khả dụng</p>
+              {side === 'buy' ? (
+                <h3 className="balance-value">{formatNumber(usdtBalance)} USDT</h3>
+              ) : (
+                <h3 className="balance-value">{formatNumber(coinBalance, 6)} {baseAsset}</h3>
+              )}
             </div>
 
-            <div className="side-switch">
+            <div className="side-switch-compact">
               <button
-                className={side === 'buy' ? 'active buy' : ''}
+                className={`btn-buy ${side === 'buy' ? 'active' : ''}`}
                 onClick={() => setSide('buy')}
               >
-                <FiArrowUpCircle /> Mua
+                Mua
               </button>
               <button
-                className={side === 'sell' ? 'active sell' : ''}
+                className={`btn-sell ${side === 'sell' ? 'active' : ''}`}
                 onClick={() => setSide('sell')}
               >
-                <FiArrowDownCircle /> Bán
+                Bán
               </button>
             </div>
 
@@ -366,103 +435,32 @@ const SpotTradingPage = () => {
                 min="0"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder={`Nhập số ${baseAsset} muốn ${side === 'buy' ? 'mua' : 'bán'}`}
+                placeholder={`Nhập số ${baseAsset}`}
               />
             </div>
 
-            <div className="order-summary">
-              <span>Giá thị trường</span>
-              <strong>${formatNumber(activePrice || 0, activePrice > 10 ? 2 : 4)}</strong>
+            <div className="order-summary compact">
+              <span>Giá hiện tại</span>
+              <strong>${formatNumber(activePrice)}</strong>
             </div>
 
-            <div className="order-summary">
-              <span>Tổng giá trị ước tính</span>
-              <strong>${formatNumber(estimatedCost || 0)}</strong>
+            <div className="order-summary compact">
+              <span>Giá trị ước tính</span>
+              <strong>{formatNumber(estimatedCost || 0)} USDT</strong>
             </div>
 
-            <div className="balance-row">
-              <span>Số dư USDT</span>
-              <strong>{formatNumber(usdtBalance)}</strong>
+            <div className="balance-info-coin">
+              <span className="text-secondary">Số dư {baseAsset}</span>
+              <strong>{formatNumber(coinBalance, 6)} {baseAsset}</strong>
             </div>
 
-            <div className="balance-row">
-              <span>Số dư {baseAsset}</span>
-              <strong>{formatNumber(coinBalance, 6)}</strong>
-            </div>
-
-            <button className="btn btn-primary btn-gradient" onClick={handlePlaceOrder} disabled={loading}>
+            <button className="btn-trade btn-primary" onClick={handlePlaceOrder} disabled={loading}>
               {loading ? 'Đang xử lý...' : side === 'buy' ? 'Mua ngay' : 'Bán ngay'}
             </button>
           </div>
-
-          <div className="glass-card order-history-card">
-            <div className="card-header">
-              <h3>Lịch sử gần đây</h3>
-            </div>
-            {openOrders.length === 0 ? (
-              <p className="text-secondary">Chưa có giao dịch nào</p>
-            ) : (
-              openOrders.map(renderOrderRow)
-            )}
-          </div>
         </div>
-
-        <div className="spot-right">
-          <div className="chart-card glass-card">
-            <div className="chart-header">
-              <h3>Biểu đồ giá {selectedPair}</h3>
-              <button className="btn-text" onClick={() => setShowAssets(true)}>
-                <FiPieChart /> Danh mục coin
-              </button>
-            </div>
-            <LivePriceChart symbol={selectedPair.replace('/', '')} height={520} />
-          </div>
-
-          <div className="market-stats glass-card">
-            <h3>Số liệu thị trường</h3>
-            <div className="stats-grid">
-              <div>
-                <p className="text-secondary">Khối lượng 24h</p>
-                <strong>{formatNumber(activeTicker?.volume || 0)}</strong>
-              </div>
-              <div>
-                <p className="text-secondary">Thay đổi 24h</p>
-                <strong className={activeTicker?.changePercent >= 0 ? 'text-success' : 'text-danger'}>
-                  {activeTicker?.changePercent ? `${activeTicker.changePercent.toFixed(2)}%` : '--'}
-                </strong>
-              </div>
-              <div>
-                <p className="text-secondary">Thời gian cập nhật</p>
-                <strong>
-                  {activeTicker?.timestamp ? new Date(activeTicker.timestamp).toLocaleTimeString('vi-VN') : '--'}
-                </strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showAssets && (
-        <div className="asset-drawer-overlay" onClick={() => setShowAssets(false)}>
-          <div className="asset-drawer glass-card" onClick={(e) => e.stopPropagation()}>
-            <div className="drawer-header">
-              <div>
-                <h3>Tài sản Spot</h3>
-                <p className="text-secondary">{holdings.length} loại coin đang nắm giữ</p>
-              </div>
-              <button className="drawer-close" onClick={() => setShowAssets(false)}>
-                <FiX />
-              </button>
-            </div>
-            {holdingsLoading ? (
-              <p>Đang tải dữ liệu...</p>
-            ) : holdings.length === 0 ? (
-              <p className="text-secondary">Chưa có tài sản nào trong ví Spot</p>
-            ) : (
-              <div className="asset-list">{assetRows}</div>
-            )}
-          </div>
-        </div>
+      ) : (
+        <div className="tab-content">{renderTabContent()}</div>
       )}
     </div>
   );

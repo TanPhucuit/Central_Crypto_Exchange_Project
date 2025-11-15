@@ -251,11 +251,19 @@ class TradingController
 
         $db = Database::getConnection();
         $futureModel = new FutureOrder();
+    $propertyModel = new Property();
 
         try {
             $db->beginTransaction();
 
             $walletModel->setBalance($wallet['wallet_id'], (float)$wallet['balance'] - $margin);
+
+            // Ensure a properties row exists for this wallet+symbol so FK constraint is satisfied.
+            $prop = $propertyModel->getByWalletAndSymbol($wallet['wallet_id'], $data['symbol']);
+            if (!$prop) {
+                // create a placeholder property with zero units (future positions don't require token units)
+                $propertyModel->create($wallet['wallet_id'], $data['symbol'], 0.0, 0.0);
+            }
 
             $orderId = $futureModel->create([
                 'wallet_id' => $wallet['wallet_id'],
@@ -360,6 +368,29 @@ class TradingController
 
         $futureModel = new FutureOrder();
         $orders = $futureModel->getOpenOrders($wallet['wallet_id']);
+
+        return Response::success($response, $orders);
+    }
+
+    public function futureHistory(Request $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $queryParams = $request->getQueryParams();
+        $userId = $queryParams['user_id'] ?? null;
+        $walletId = (int)$args['walletId'];
+
+        if (!$userId) {
+            return Response::error($response, 'user_id parameter is required', 400);
+        }
+
+        $walletModel = new Wallet();
+        $wallet = $walletModel->findById($walletId);
+
+        if (!$wallet || $wallet['user_id'] != $userId) {
+            return Response::error($response, 'Wallet not found', 404);
+        }
+
+        $futureModel = new FutureOrder();
+        $orders = $futureModel->getByWalletId($walletId);
 
         return Response::success($response, $orders);
     }

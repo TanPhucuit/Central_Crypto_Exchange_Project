@@ -202,6 +202,11 @@ export const tradingAPI = {
     const response = await api.get(`/trading/futures/open?user_id=${userId}`);
     return response.data;
   },
+  // Fetch futures history for a specific future wallet
+  getFutureHistory: async (userId, walletId) => {
+    const response = await api.get(`/trading/futures/${walletId}/history?user_id=${userId}`);
+    return response.data;
+  },
 };
 
 // ============= P2P ENDPOINTS =============

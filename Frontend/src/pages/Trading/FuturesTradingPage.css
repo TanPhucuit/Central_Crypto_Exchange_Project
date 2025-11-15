@@ -384,26 +384,32 @@
   text-align: right;
 }
 
-.btn-long {
+.order-panel-compact .btn-buy,
+.order-panel-compact .btn-sell,
+.futures-trading-page .side-switch-compact button.btn-buy,
+.futures-trading-page .side-switch-compact button.btn-sell {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.order-panel-compact .btn-buy.active,
+.futures-trading-page .side-switch-compact button.btn-buy.active {
   background: linear-gradient(135deg, #10b981, #059669);
   color: white;
+  border-color: rgba(16,185,129,0.6);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
 }
 
-.btn-long:hover {
-  background: linear-gradient(135deg, #059669, #047857);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
-}
-
-.btn-short {
+.order-panel-compact .btn-sell.active,
+.futures-trading-page .side-switch-compact button.btn-sell.active {
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: white;
-}
-
-.btn-short:hover {
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
+  border-color: rgba(239,68,68,0.6);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
 }
 
 /* Shared styles from Spot */
