@@ -43,14 +43,15 @@ class AccountTransaction
     {
         $stmt = $this->db->prepare("
             INSERT INTO account_transactions 
-            (source_account_number, target_account_number, transaction_amount)
-            VALUES (?, ?, ?)
+            (source_account_number, target_account_number, transaction_amount, note)
+            VALUES (?, ?, ?, ?)
         ");
         
         $success = $stmt->execute([
             $data['source_account'] ?? $data['source_account_number'],
             $data['destination_account_number'] ?? $data['target_account_number'],
-            $data['amount'] ?? $data['transaction_amount']
+            $data['amount'] ?? $data['transaction_amount'],
+            $data['note'] ?? null
         ]);
 
         return $success ? (int)$this->db->lastInsertId() : null;
@@ -87,18 +88,20 @@ class AccountTransaction
     /**
      * Get all transactions for a merchant's bank accounts
      */
-    public function getByAccountNumbers(array $accountNumbers): array
+    public function getByAccountNumbers(array $accountNumbers, int $limit = 100): array
     {
         if (empty($accountNumbers)) {
             return [];
         }
         
+        $limit = (int)$limit;
         $placeholders = str_repeat('?,', count($accountNumbers) - 1) . '?';
         $stmt = $this->db->prepare("
             SELECT * FROM account_transactions 
             WHERE source_account_number IN ($placeholders) 
                OR target_account_number IN ($placeholders)
             ORDER BY ts DESC
+            LIMIT {$limit}
         ");
         $params = array_merge($accountNumbers, $accountNumbers);
         $stmt->execute($params);

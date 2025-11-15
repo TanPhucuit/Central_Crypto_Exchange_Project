@@ -24,7 +24,7 @@ class FutureOrder
             LIMIT {$limit}
         ");
         $stmt->execute([$walletId]);
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getOpenOrders(int $walletId): array
@@ -35,7 +35,7 @@ class FutureOrder
             ORDER BY open_ts DESC
         ");
         $stmt->execute([$walletId]);
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function findById(int $futureOrderId): ?array
@@ -46,7 +46,7 @@ class FutureOrder
             LIMIT 1
         ");
         $stmt->execute([$futureOrderId]);
-        $order = $stmt->fetch();
+        $order = $stmt->fetch(PDO::FETCH_ASSOC);
         return $order ?: null;
     }
 
@@ -54,27 +54,31 @@ class FutureOrder
     {
         $stmt = $this->db->prepare("
             INSERT INTO future_orders 
-            (wallet_id, symbol, leverage)
-            VALUES (?, ?, ?)
+            (wallet_id, symbol, side, entry_price, position_size, margin, leverage)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ");
         
         $success = $stmt->execute([
             $data['wallet_id'],
             $data['symbol'],
-            $data['leverage']
+            $data['side'],
+            $data['entry_price'],
+            $data['position_size'],
+            $data['margin'],
+            $data['leverage'],
         ]);
 
         return $success ? (int)$this->db->lastInsertId() : null;
     }
 
-    public function close(int $futureOrderId, float $profit): bool
+    public function close(int $futureOrderId, float $exitPrice, float $profit): bool
     {
         $stmt = $this->db->prepare("
             UPDATE future_orders 
-            SET close_ts = CURRENT_TIMESTAMP(6), profit = ?
+            SET close_ts = CURRENT_TIMESTAMP(6), exit_price = ?, profit = ?
             WHERE future_order_id = ?
         ");
-        return $stmt->execute([$profit, $futureOrderId]);
+        return $stmt->execute([$exitPrice, $profit, $futureOrderId]);
     }
 
     public function getBySymbol(string $symbol, int $limit = 50): array
@@ -87,6 +91,6 @@ class FutureOrder
             LIMIT {$limit}
         ");
         $stmt->execute([$symbol]);
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

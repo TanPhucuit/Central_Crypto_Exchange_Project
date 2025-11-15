@@ -122,6 +122,11 @@ class P2PController
             return Response::error($response, 'source_account and amount are required', 400);
         }
 
+        $amount = floatval($data['amount']);
+        if ($amount <= 0) {
+            return Response::error($response, 'amount must be greater than 0', 400);
+        }
+
         $p2pModel = new P2POrder();
         $order = $p2pModel->findById($orderId);
 
@@ -137,8 +142,17 @@ class P2PController
             return Response::error($response, 'Order is not in open state', 400);
         }
 
-        // Get merchant's bank account
+        // Get user and merchant bank accounts
         $bankModel = new BankAccount();
+        $sourceAccount = $bankModel->findByAccountNumber($data['source_account']);
+        if (!$sourceAccount || $sourceAccount['user_id'] != $userId) {
+            return Response::error($response, 'Invalid source bank account', 400);
+        }
+
+        if (floatval($sourceAccount['account_balance']) < $amount) {
+            return Response::error($response, 'Insufficient bank account balance', 400);
+        }
+
         $merchantAccounts = $bankModel->getByUserId($order['merchant_id']);
         
         if (empty($merchantAccounts)) {
@@ -153,7 +167,7 @@ class P2PController
         $transactionId = $txModel->create([
             'source_account_number' => $data['source_account'],
             'destination_account_number' => $merchantAccount['account_number'],
-            'amount' => $data['amount'],
+            'amount' => $amount,
             'transaction_type' => 'p2p_payment',
             'description' => 'P2P Order #' . $orderId . ' - Payment to merchant'
         ]);
@@ -161,6 +175,10 @@ class P2PController
         if (!$transactionId) {
             return Response::error($response, 'Failed to create transaction', 500);
         }
+
+        // Update account balances
+        $bankModel->updateBalance($sourceAccount['account_number'], -$amount);
+        $bankModel->updateBalance($merchantAccount['account_number'], $amount);
 
         // Update order state to matched (waiting for merchant confirmation)
         $p2pModel->updateState($orderId, 'matched');
@@ -200,34 +218,46 @@ class P2PController
         // Transfer USDT from merchant wallet to user wallet
         $walletModel = new Wallet();
         
-        // Get merchant USDT wallet
-        $merchantWallet = $walletModel->getByUserIdAndSymbol($merchantId, 'USDT');
-        if (!$merchantWallet || floatval($merchantWallet['balance']) < floatval($order['unit_numbers'])) {
+        // Get merchant spot wallet
+        $merchantWallet = $walletModel->getByUserIdAndType($merchantId, 'spot');
+        if (!$merchantWallet) {
+            return Response::error($response, 'Merchant spot wallet not found', 400);
+        }
+
+        $orderAmount = floatval($order['unit_numbers']);
+        $merchantBalance = floatval($merchantWallet['balance']);
+        if ($merchantBalance < $orderAmount) {
             return Response::error($response, 'Insufficient merchant USDT balance', 400);
         }
 
-        // Get user USDT wallet (create if not exists)
-        $userWallet = $walletModel->getByUserIdAndSymbol($order['user_id'], 'USDT');
+        // Get user spot wallet (create if not exists)
+        $userWallet = $walletModel->getByUserIdAndType($order['user_id'], 'spot');
         if (!$userWallet) {
-            $walletModel->create([
+            $newWalletId = $walletModel->create([
                 'user_id' => $order['user_id'],
-                'symbol' => 'USDT',
-                'balance' => 0
+                'type' => 'spot',
+                'balance' => 0,
+                'symbol' => 'USDT'
             ]);
-            $userWallet = $walletModel->getByUserIdAndSymbol($order['user_id'], 'USDT');
+
+            if (!$newWalletId) {
+                return Response::error($response, 'Failed to create user wallet', 500);
+            }
+
+            $userWallet = $walletModel->findById($newWalletId);
         }
 
-    // Deduct from merchant (crypto units stored in properties)
-    $newMerchantBalance = floatval($merchantWallet['balance']) - floatval($order['unit_numbers']);
-    $walletModel->updatePropertyBalance($merchantWallet['wallet_id'], 'USDT', $newMerchantBalance);
-    // Also update wallet.balance for spot wallet display/consistency
-    $walletModel->updateBalance($merchantWallet['wallet_id'], $newMerchantBalance);
+        $userBalance = floatval($userWallet['balance']);
 
-    // Add to user (crypto units stored in properties)
-    $newUserBalance = floatval($userWallet['balance']) + floatval($order['unit_numbers']);
-    $walletModel->updatePropertyBalance($userWallet['wallet_id'], 'USDT', $newUserBalance);
-    // Also update wallet.balance for spot wallet display/consistency
-    $walletModel->updateBalance($userWallet['wallet_id'], $newUserBalance);
+        // Deduct from merchant
+        $newMerchantBalance = $merchantBalance - $orderAmount;
+        $walletModel->setBalance($merchantWallet['wallet_id'], $newMerchantBalance);
+        $walletModel->updatePropertyBalance($merchantWallet['wallet_id'], 'USDT', $newMerchantBalance);
+
+        // Add to user
+        $newUserBalance = $userBalance + $orderAmount;
+        $walletModel->setBalance($userWallet['wallet_id'], $newUserBalance);
+        $walletModel->updatePropertyBalance($userWallet['wallet_id'], 'USDT', $newUserBalance);
 
         // Update order state to filled
         $p2pModel->updateState($orderId, 'filled');

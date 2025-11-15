@@ -9,6 +9,7 @@ const WalletPage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [wallets, setWallets] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [spotWalletId, setSpotWalletId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -27,28 +28,46 @@ const WalletPage = () => {
   useEffect(() => {
     if (userId) {
       loadWalletData();
-      loadTransactions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  useEffect(() => {
+    if (userId && spotWalletId) {
+      loadTransactions(spotWalletId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, spotWalletId]);
   
   const loadWalletData = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+      setSpotWalletId(null);
+
       const response = await walletAPI.getWallets(userId);
       
       if (response.success && response.data) {
-        // Map backend wallet data to display format
-        const formattedWallets = response.data.map(wallet => ({
-          symbol: wallet.symbol,
-          name: wallet.symbol, // Could be enhanced with full names
-          balance: parseFloat(wallet.balance) || 0,
-          usdValue: parseFloat(wallet.balance) || 0, // TODO: Calculate with real-time prices
-          icon: iconMap[wallet.symbol] || wallet.symbol,
-          wallet_id: wallet.wallet_id,
-        }));
+        const spotWallet = response.data.find((wallet) => wallet.type === 'spot');
+        setSpotWalletId(spotWallet?.wallet_id || null);
+
+        const formattedWallets = response.data.map((wallet) => {
+          const symbol =
+            wallet.type === 'spot'
+              ? 'USDT'
+              : wallet.symbol || (wallet.type ? wallet.type.toUpperCase() : 'WALLET');
+          const balance = parseFloat(wallet.balance) || 0;
+
+          return {
+            symbol,
+            name: symbol,
+            balance,
+            usdValue: balance, // TODO: replace with live price conversion
+            icon: iconMap[symbol] || symbol,
+            wallet_id: wallet.wallet_id,
+          };
+        });
+
         setWallets(formattedWallets);
       }
     } catch (err) {
@@ -59,10 +78,15 @@ const WalletPage = () => {
     }
   };
   
-  const loadTransactions = async () => {
+  const loadTransactions = async (walletId) => {
+    if (!walletId) {
+      setTransactions([]);
+      return;
+    }
+
     try {
       // Load recent spot transactions
-      const response = await tradingAPI.getSpotHistory(userId, 10);
+      const response = await tradingAPI.getSpotHistory(userId, walletId);
       
       if (response.success && response.data) {
         // Map backend transaction data to display format
@@ -111,108 +135,115 @@ const WalletPage = () => {
       {/* Main Content */}
       {!loading && !error && (
         <>
-          <div className="wallet-summary">
-            <div className="summary-card main">
-              <div className="summary-label">Tổng tài sản ước tính</div>
-              <div className="summary-value">${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className="summary-btc">
-                {wallets.length > 0 ? `${wallets.length} loại tài sản` : 'Chưa có tài sản'}
+          <div className="wallet-hero">
+            <div className="wallet-hero-info">
+              <span className="eyebrow">Tổng tài sản ước tính</span>
+              <h2>${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+              <p className="hero-subtitle">
+                {wallets.length > 0 ? `${wallets.length} ví đang hoạt động` : 'Chưa có ví nào được tạo'}
+              </p>
+              <div className="wallet-stat-row">
+                <div>
+                  <span className="stat-label">Ví Spot</span>
+                  <strong>{wallets.find(w => w.symbol === 'USDT')?.balance?.toLocaleString() || 0} USDT</strong>
+                </div>
+                <div>
+                  <span className="stat-label">Ví Futures</span>
+                  <strong>{wallets.find(w => w.symbol === 'FUTURE')?.balance?.toLocaleString() || 0}</strong>
+                </div>
               </div>
             </div>
-        <div className="summary-actions">
-          <button className="action-btn deposit">
-            <FiArrowRightCircle size={20} />
-            <span>Nạp tiền</span>
-          </button>
-          <button className="action-btn withdraw">
-            <FiSend size={20} />
-            <span>Rút tiền</span>
-          </button>
-          <button className="action-btn transfer">
-            <FiClock size={20} />
-            <span>Chuyển</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="wallet-tabs">
-        <button
-          className={`wallet-tab ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
-        >
-          Tổng quan
-        </button>
-        <button
-          className={`wallet-tab ${activeTab === 'spot' ? 'active' : ''}`}
-          onClick={() => setActiveTab('spot')}
-        >
-          Ví Spot
-        </button>
-        <button
-          className={`wallet-tab ${activeTab === 'futures' ? 'active' : ''}`}
-          onClick={() => setActiveTab('futures')}
-        >
-          Ví Futures
-        </button>
-      </div>
-
-      <div className="wallets-grid">
-        {wallets.map((wallet) => (
-          <div key={wallet.symbol} className="wallet-card">
-            <div className="wallet-header">
-              <div className="wallet-icon">{wallet.icon}</div>
-              <div className="wallet-info">
-                <div className="wallet-symbol">{wallet.symbol}</div>
-                <div className="wallet-name">{wallet.name}</div>
-              </div>
-            </div>
-            <div className="wallet-balance">
-              <div className="balance-amount">
-                {wallet.balance.toLocaleString()} {wallet.symbol}
-              </div>
-              <div className="balance-usd">
-                ≈ ${wallet.usdValue.toLocaleString()}
-              </div>
-            </div>
-            <div className="wallet-actions">
-              <button className="wallet-action-btn">Nạp</button>
-              <button className="wallet-action-btn">Rút</button>
-              <button className="wallet-action-btn">Giao dịch</button>
+            <div className="wallet-hero-actions">
+              <button className="action-chip">
+                <FiArrowRightCircle /> Nạp tiền
+              </button>
+              <button className="action-chip">
+                <FiSend /> Rút tiền
+              </button>
+              <button className="action-chip ghost">
+                <FiClock /> Chuyển nội bộ
+              </button>
             </div>
           </div>
-        ))}
-      </div>
 
-      <div className="transactions-section">
-        <div className="section-header">
-          <h3>Lịch sử giao dịch gần đây</h3>
-          <button className="btn-text">Xem tất cả</button>
-        </div>
-        <div className="transactions-list">
-          <div className="transaction-header">
-            <span>Loại</span>
-            <span>Tiền</span>
-            <span>Số lượng</span>
-            <span>Thời gian</span>
-            <span>Trạng thái</span>
+          <div className="wallet-cards-grid">
+            {wallets.map((wallet) => (
+              <div key={wallet.wallet_id} className="wallet-card">
+                <div className="wallet-card-header">
+                  <div className="wallet-icon">{wallet.icon}</div>
+                  <div>
+                    <p className="wallet-label">{wallet.name}</p>
+                    <span className="wallet-type">{wallet.symbol === 'USDT' ? 'Ví Spot' : wallet.symbol}</span>
+                  </div>
+                </div>
+                <div className="wallet-card-body">
+                  <div>
+                    <span className="stat-label">Số dư</span>
+                    <h3>{wallet.balance.toLocaleString()} {wallet.symbol}</h3>
+                  </div>
+                  <span className="subtle">≈ ${wallet.usdValue.toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
           </div>
-          {transactions.map((tx, index) => (
-            <div key={index} className="transaction-item">
-              <span className={`transaction-type ${tx.type}`}>
-                {tx.type === 'deposit' ? 'Nạp tiền' : tx.type === 'withdraw' ? 'Rút tiền' : 'Chuyển'}
-              </span>
-              <span className="transaction-symbol">{tx.symbol}</span>
-              <span className="transaction-amount">
-                {tx.type === 'withdraw' ? '-' : '+'}{tx.amount} {tx.symbol}
-              </span>
-              <span className="transaction-time text-secondary">{tx.time}</span>
-              <span className={`transaction-status ${tx.status}`}>
-                {tx.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}
-              </span>
+
+          <div className="wallet-layout">
+            <div className="wallet-assets-panel">
+              <div className="panel-header">
+                <div>
+                  <h3>Tài sản đang nắm giữ</h3>
+                  <p className="panel-sub">Theo dõi danh mục và phân bổ tài sản của bạn</p>
+                </div>
+                <span className="badge">{wallets.length} ví</span>
+              </div>
+              <div className="asset-table">
+                <div className="asset-row heading">
+                  <span>Tài sản</span>
+                  <span>Số dư</span>
+                  <span>Giá trị ước tính</span>
+                </div>
+                {wallets.map((wallet) => (
+                  <div key={`${wallet.wallet_id}-row`} className="asset-row">
+                    <span className="asset-name">{wallet.symbol}</span>
+                    <span>{wallet.balance.toLocaleString()} {wallet.symbol}</span>
+                    <span>${wallet.usdValue.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-      </div>
+
+            <div className="transactions-panel">
+              <div className="panel-header">
+                <div>
+                  <h3>Lịch sử giao dịch</h3>
+                  <p className="panel-sub">Các lệnh Spot gần đây nhất</p>
+                </div>
+                <button className="btn-text">Xem tất cả</button>
+              </div>
+              <div className="transactions-timeline">
+                {transactions.length === 0 && (
+                  <p className="empty-state">Chưa có giao dịch nào</p>
+                )}
+                {transactions.map((tx) => (
+                  <div key={tx.transaction_id} className="timeline-item">
+                    <div className="timeline-dot" data-type={tx.type}></div>
+                    <div>
+                      <div className="timeline-top">
+                        <span className="timeline-type">{tx.type === 'deposit' ? 'Nạp' : tx.type === 'withdraw' ? 'Rút' : 'Chuyển'}</span>
+                        <span className="timeline-amount">
+                          {tx.type === 'withdraw' ? '-' : '+'}{tx.amount} {tx.symbol}
+                        </span>
+                      </div>
+                      <div className="timeline-bottom">
+                        <span>{tx.time}</span>
+                        <span className={`timeline-status ${tx.status}`}>{tx.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </>
       )}
     </div>

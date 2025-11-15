@@ -2,6 +2,60 @@
   max-width: 1200px;
 }
 
+.eyebrow {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.hero-subtitle {
+  color: var(--text-secondary);
+}
+
+.merchant-wallet-hero {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(14, 165, 233, 0.15));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 28px;
+  padding: var(--spacing-xxl);
+  margin-bottom: var(--spacing-xxl);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-xl);
+}
+
+.merchant-wallet-hero h2 {
+  font-size: 40px;
+  margin: var(--spacing-xs) 0;
+}
+
+.merchant-wallet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.action-chip {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(15, 23, 42, 0.5);
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.action-chip:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.action-chip.ghost {
+  background: transparent;
+}
+
 .page-header {
   margin-bottom: var(--spacing-xl);
 }

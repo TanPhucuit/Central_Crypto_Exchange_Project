@@ -17,8 +17,8 @@ const ProfilePage = () => {
   const [profileData, setProfileData] = useState({
     username: '',
     email: '',
-    phone_number: '',
-    full_name: '',
+    phoneNumber: '',
+    fullName: '',
   });
 
   const [passwordData, setPasswordData] = useState({
@@ -44,8 +44,8 @@ const ProfilePage = () => {
         setProfileData({
           username: response.data.username || '',
           email: response.data.email || '',
-          phone_number: response.data.phone_number || '',
-          full_name: response.data.full_name || '',
+          phoneNumber: response.data.phone_number || response.data.phoneNumber || '',
+          fullName: response.data.full_name || response.data.fullName || '',
         });
       }
     } catch (err) {
@@ -64,13 +64,18 @@ const ProfilePage = () => {
       setSuccess(null);
       
       const response = await userAPI.updateProfile(userId, {
-        full_name: profileData.full_name,
-        phone_number: profileData.phone_number,
+        full_name: profileData.fullName,
+        phone_number: profileData.phoneNumber,
       });
       
       if (response.success) {
         // Update Redux state
-        dispatch(updateProfile(profileData));
+        dispatch(updateProfile({
+          username: profileData.username,
+          email: profileData.email,
+          phone_number: profileData.phoneNumber,
+          full_name: profileData.fullName,
+        }));
         setSuccess('Cập nhật thông tin thành công!');
         setTimeout(() => setSuccess(null), 3000);
       }
@@ -189,8 +194,8 @@ const ProfilePage = () => {
                   <label>Số điện thoại</label>
                   <input
                     type="tel"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                    value={profileData.phoneNumber}
+                    onChange={(e) => setProfileData({ ...profileData, phoneNumber: e.target.value })}
                     className="form-input"
                     placeholder="Nhập số điện thoại"
                   />
@@ -304,3 +309,5 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
+
+

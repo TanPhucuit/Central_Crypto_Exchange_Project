@@ -8,6 +8,7 @@ const DashboardPage = () => {
   const { user, userId } = useAuth();
   const [wallets, setWallets] = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [spotWalletId, setSpotWalletId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState({
@@ -30,10 +31,8 @@ const DashboardPage = () => {
       setLoading(true);
       setError(null);
       
-      // Load data - wallet data first (critical), then transactions (optional)
+      // Load wallet/summary data first (critical)
       await loadWalletData();
-      loadRecentTransactions(); // Don't await - load in background
-      
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       setError(error.message || 'Không thể tải dữ liệu dashboard');
@@ -62,6 +61,8 @@ const DashboardPage = () => {
           }));
         
         setWallets(formattedWallets);
+        const spotWallet = summary.wallets.find((wallet) => wallet.type === 'spot');
+        setSpotWalletId(spotWallet?.wallet_id || null);
         
         // Update stats with calculated values
         setStats({
@@ -78,10 +79,22 @@ const DashboardPage = () => {
     }
   };
   
-  const loadRecentTransactions = async () => {
+  useEffect(() => {
+    if (userId && spotWalletId) {
+      loadRecentTransactions(spotWalletId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, spotWalletId]);
+
+  const loadRecentTransactions = async (walletId) => {
+    if (!walletId) {
+      setRecentTransactions([]);
+      return;
+    }
+
     try {
       // Load recent spot transactions
-      const response = await tradingAPI.getSpotHistory(userId, 5);
+      const response = await tradingAPI.getSpotHistory(userId, walletId);
       
       if (response.success && response.data) {
         const formatted = response.data.map(tx => ({

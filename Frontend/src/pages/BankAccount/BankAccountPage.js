@@ -4,135 +4,235 @@ import { useAuth } from '../../hooks/useAuth';
 import { bankAPI } from '../../services/api';
 import './BankAccountPage.css';
 
+const initialTransferData = {
+  fromAccount: '',
+  toAccount: '',
+  amount: '',
+  note: '',
+};
+
+const initialAccountData = {
+  bank_name: '',
+  account_number: '',
+  account_name: '',
+  branch: '',
+};
+
 const BankAccountPage = () => {
   const { userId } = useAuth();
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [transferData, setTransferData] = useState(initialTransferData);
+  const [newAccountData, setNewAccountData] = useState(initialAccountData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  
-  const [transferData, setTransferData] = useState({
-    fromAccount: '',
-    toAccount: '',
-    amount: '',
-    note: '',
-  });
-  
-  const [newAccountData, setNewAccountData] = useState({
-    bank_name: '',
-    account_number: '',
-    account_name: '',
-    branch: '',
-  });
-  
-  const [bankAccounts, setBankAccounts] = useState([]);
-  
-  // Load bank accounts on mount
+
+  const totalBalance = bankAccounts.reduce(
+    (sum, account) => sum + parseFloat(account.account_balance || 0),
+    0
+  );
+
   useEffect(() => {
     if (userId) {
       loadBankAccounts();
+      loadTransactions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
-  
+
+  const setTimedSuccess = (message) => {
+    setSuccess(message);
+    setTimeout(() => setSuccess(null), 3500);
+  };
+
+  const setTimedError = (message) => {
+    setError(message);
+    setTimeout(() => setError(null), 4000);
+  };
+
   const loadBankAccounts = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await bankAPI.getAccounts(userId);
-      
-      if (response.success && response.data) {
+      if (response.success && Array.isArray(response.data)) {
         setBankAccounts(response.data);
+      } else {
+        setBankAccounts([]);
       }
     } catch (err) {
       console.error('Error loading bank accounts:', err);
-      setError(err.message || 'Không thể tải danh sách tài khoản ngân hàng');
+      setTimedError(err.message || 'Không thể tải danh sách tài khoản ngân hàng');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTransactions = async () => {
+    if (!userId) return;
+    try {
+      setTransactionsLoading(true);
+      const response = await bankAPI.getTransactions(userId, 50);
+      if (response.success && Array.isArray(response.data)) {
+        setTransactions(response.data);
+      } else {
+        setTransactions([]);
+      }
+    } catch (err) {
+      console.error('Error loading bank transactions:', err);
+    } finally {
+      setTransactionsLoading(false);
     }
   };
 
   const handleAddAccount = () => {
     setShowAddModal(true);
-    setNewAccountData({
-      bank_name: '',
-      account_number: '',
-      account_name: '',
-      branch: '',
-    });
+    setNewAccountData(initialAccountData);
   };
-  
+
   const handleAddAccountSubmit = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
       setError(null);
-      
-      // Backend expects: account_number, bank_name, account_balance (optional)
+
       const response = await bankAPI.createAccount(
-        userId, 
-        newAccountData.account_number, 
+        userId,
+        newAccountData.account_number,
         newAccountData.bank_name,
-        0 // Initial balance
+        0
       );
-      
+
       if (response.success) {
-        setSuccess('Thêm tài khoản ngân hàng thành công!');
         setShowAddModal(false);
-        loadBankAccounts(); // Reload list
-        setTimeout(() => setSuccess(null), 3000);
+        setNewAccountData(initialAccountData);
+        setTimedSuccess('Thêm tài khoản ngân hàng thành công');
+        loadBankAccounts();
       }
     } catch (err) {
-      setError(err.message || 'Không thể thêm tài khoản ngân hàng');
+      setTimedError(err.message || 'Không thể thêm tài khoản ngân hàng');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditAccount = (id) => {
-    // TODO: Implement edit functionality
-    alert('Chức năng chỉnh sửa sẽ sớm được triển khai!');
-  };
+  const handleDeleteAccount = async (accountNumber) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa tài khoản này?')) {
+      return;
+    }
 
-  const handleDeleteAccount = async (id) => {
-    if (window.confirm('Bạn có chắc muốn xóa tài khoản ngân hàng này?')) {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await bankAPI.deleteAccount(userId, id);
-        
-        if (response.success) {
-          setSuccess('Xóa tài khoản ngân hàng thành công!');
-          loadBankAccounts(); // Reload list
-          setTimeout(() => setSuccess(null), 3000);
-        }
-      } catch (err) {
-        setError(err.message || 'Không thể xóa tài khoản ngân hàng');
-      } finally {
-        setLoading(false);
+    try {
+      setLoading(true);
+      const response = await bankAPI.deleteAccount(userId, accountNumber);
+      if (response.success) {
+        setTimedSuccess('Đã xóa tài khoản ngân hàng');
+        loadBankAccounts();
       }
+    } catch (err) {
+      setTimedError(err.message || 'Không thể xóa tài khoản ngân hàng');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSetDefault = (id) => {
-    // TODO: Implement set default functionality
-    alert('Chức năng đặt làm mặc định sẽ sớm được triển khai!');
+  const handleEditAccount = () => {
+    alert('Chức năng chỉnh sửa sẽ sớm được bổ sung.');
+  };
+
+  const handleSetDefault = (accountNumber) => {
+    alert(`Chức năng đặt ${accountNumber} làm tài khoản mặc định sẽ sớm được bổ sung.`);
   };
 
   const handleTransfer = () => {
+    if (bankAccounts.length > 0) {
+      setTransferData((prev) => ({
+        ...prev,
+        fromAccount: prev.fromAccount || bankAccounts[0].account_number || '',
+      }));
+    }
     setShowTransferModal(true);
   };
 
-  const handleTransferSubmit = (e) => {
+  const handleTransferSubmit = async (e) => {
     e.preventDefault();
-    // TODO: API call to process transfer
-    console.log('Transfer:', transferData);
-    alert('Chuyển khoản thành công!');
-    setShowTransferModal(false);
-    setTransferData({ fromAccount: '', toAccount: '', amount: '', note: '' });
+
+    if (!transferData.fromAccount || !transferData.toAccount) {
+      setTimedError('Vui lòng chọn đầy đủ tài khoản nguồn và tài khoản đích');
+      return;
+    }
+
+    if (transferData.fromAccount === transferData.toAccount) {
+      setTimedError('Tài khoản nguồn và đích cần phải khác nhau');
+      return;
+    }
+
+    const amountValue = parseFloat(transferData.amount);
+    if (!amountValue || amountValue <= 0) {
+      setTimedError('Số tiền chuyển phải lớn hơn 0');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await bankAPI.transferFunds(userId, {
+        fromAccount: transferData.fromAccount,
+        toAccount: transferData.toAccount,
+        amount: amountValue,
+        note: transferData.note,
+      });
+
+      if (response.success) {
+        setTimedSuccess('Chuyển khoản nội bộ thành công');
+        setShowTransferModal(false);
+        setTransferData(initialTransferData);
+        loadBankAccounts();
+        loadTransactions();
+      } else {
+        setTimedError(response.message || 'Không thể thực hiện chuyển khoản');
+      }
+    } catch (err) {
+      setTimedError(err.message || 'Không thể thực hiện chuyển khoản');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (value) =>
+    `${Number(value || 0).toLocaleString('vi-VN')} VND`;
+
+  const renderTransaction = (tx) => {
+    const isIncoming = tx.type === 'incoming';
+    const directionLabel = isIncoming ? 'Nhận tiền' : 'Chuyển đi';
+    const counterparty = isIncoming ? tx.source_account : tx.target_account;
+    const prefix = isIncoming ? '+' : '-';
+    const note = tx.note?.trim() || 'Không có nội dung';
+    const timestamp = tx.timestamp ? new Date(tx.timestamp).toLocaleString('vi-VN') : '--';
+
+    return (
+      <div key={tx.transaction_id} className="history-item">
+        <div className={`history-indicator ${isIncoming ? 'incoming' : 'outgoing'}`} />
+        <div className="history-content">
+          <div className="history-row">
+            <strong>{directionLabel}</strong>
+            <span className={`history-amount ${isIncoming ? 'incoming' : 'outgoing'}`}>
+              {prefix}
+              {Number(tx.amount || 0).toLocaleString('vi-VN')} VND
+            </span>
+          </div>
+          <div className="history-row subtle">
+            <span>{isIncoming ? 'Từ' : 'Đến'}: {counterparty || '---'}</span>
+            <span>{timestamp}</span>
+          </div>
+          <p className="history-note">{note}</p>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -140,7 +240,7 @@ const BankAccountPage = () => {
       <div className="page-header">
         <div>
           <h1>Tài khoản ngân hàng</h1>
-          <p className="text-secondary">Quản lý tài khoản ngân hàng liên kết</p>
+          <p className="text-secondary">Liên kết ngân hàng và chuyển khoản nội bộ an toàn</p>
         </div>
         <div className="header-actions">
           <button className="btn btn-secondary" onClick={handleTransfer}>
@@ -151,83 +251,89 @@ const BankAccountPage = () => {
           </button>
         </div>
       </div>
-      
-      {/* Success/Error Messages */}
-      {success && (
-        <div className="alert alert-success">
-          ✓ {success}
-        </div>
-      )}
-      {error && (
-        <div className="alert alert-danger">
-          ⚠️ {error}
-        </div>
-      )}
-      
-      {/* Loading State */}
+
+      {success && <div className="alert alert-success">{success}</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
+
       {loading && bankAccounts.length === 0 ? (
         <div className="loading-container">
           <p>Đang tải danh sách tài khoản...</p>
         </div>
       ) : (
         <>
-          <div className="bank-accounts-grid">
-            {bankAccounts.length > 0 ? (
-              bankAccounts.map((account) => (
-                <div key={account.account_id || account.id} className="bank-card">
-            {account.isDefault && (
-              <div className="default-badge">Mặc định</div>
-            )}
-            
-            <div className="bank-header">
-              <div className="bank-logo">
-                {(account.bank_name || account.bankName || 'B').charAt(0).toUpperCase()}
-              </div>
-              <div className="bank-info">
-                <h3>{account.bank_name || account.bankName || 'Unknown Bank'}</h3>
-                <p className="text-secondary">{account.branch || 'Chi nhánh chính'}</p>
-              </div>
+          <div className="bank-hero">
+            <div>
+              <span className="eyebrow">Tổng số dư liên kết</span>
+              <h2>{formatCurrency(totalBalance)}</h2>
+              <p className="hero-subtitle">
+                {bankAccounts.length > 0
+                  ? `${bankAccounts.length} tài khoản đang hoạt động`
+                  : 'Chưa có tài khoản nào được liên kết'}
+              </p>
             </div>
-
-            <div className="bank-details">
-              <div className="detail-row">
-                <span className="detail-label">Số tài khoản:</span>
-                <span className="detail-value">{account.account_number || account.accountNumber || 'N/A'}</span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">Số dư:</span>
-                <span className="detail-value">${parseFloat(account.account_balance || 0).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="bank-actions">
-              {!account.isDefault && (
-                <button
-                  className="action-btn"
-                  onClick={() => handleSetDefault(account.account_number)}
-                >
-                  Đặt làm mặc định
-                </button>
-              )}
-              <button
-                className="action-btn"
-                onClick={() => handleEditAccount(account.account_number)}
-              >
-                <FiEdit2 /> Sửa
+            <div className="bank-hero-actions">
+              <button className="action-chip" onClick={handleTransfer}>
+                <FiSend /> Tạo lệnh chuyển
               </button>
-              <button
-                className="action-btn danger"
-                onClick={() => handleDeleteAccount(account.account_number)}
-              >
-                <FiTrash2 /> Xóa
+              <button className="action-chip ghost" onClick={handleAddAccount}>
+                Liên kết tài khoản
               </button>
             </div>
           </div>
-        ))
+
+          <div className="bank-accounts-grid">
+            {bankAccounts.length > 0 ? (
+              bankAccounts.map((account) => (
+                <div key={account.account_number} className="bank-card">
+                  {account.isDefault && <div className="default-badge">Mặc định</div>}
+
+                  <div className="bank-header">
+                    <div className="bank-logo">
+                      {(account.bank_name || 'B').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="bank-info">
+                      <h3>{account.bank_name || 'Ngân hàng'}</h3>
+                      <p className="text-secondary">{account.branch || 'Chi nhánh chính'}</p>
+                    </div>
+                  </div>
+
+                  <div className="bank-details">
+                    <div className="detail-row">
+                      <span className="detail-label">Chủ tài khoản:</span>
+                      <span className="detail-value">{account.account_name || '---'}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Số tài khoản:</span>
+                      <span className="detail-value">{account.account_number || '---'}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Số dư:</span>
+                      <span className="detail-value">{formatCurrency(account.account_balance)}</span>
+                    </div>
+                  </div>
+
+                  <div className="bank-actions">
+                    {!account.isDefault && (
+                      <button className="action-btn" onClick={() => handleSetDefault(account.account_number)}>
+                        Đặt mặc định
+                      </button>
+                    )}
+                    <button className="action-btn" onClick={handleEditAccount}>
+                      <FiEdit2 /> Sửa
+                    </button>
+                    <button
+                      className="action-btn danger"
+                      onClick={() => handleDeleteAccount(account.account_number)}
+                    >
+                      <FiTrash2 /> Xóa
+                    </button>
+                  </div>
+                </div>
+              ))
             ) : (
               <div className="empty-state">
                 <p>Chưa có tài khoản ngân hàng nào</p>
-                <p className="text-secondary">Thêm tài khoản để bắt đầu giao dịch</p>
+                <p className="text-secondary">Hãy thêm tài khoản để bắt đầu giao dịch</p>
               </div>
             )}
 
@@ -237,14 +343,36 @@ const BankAccountPage = () => {
             </div>
           </div>
 
-          <div className="info-section">
-            <h3>Lưu ý quan trọng</h3>
-            <ul className="info-list">
-              <li>Tài khoản ngân hàng phải trùng tên với chủ tài khoản sàn giao dịch</li>
-              <li>Hệ thống sẽ xác minh thông tin tài khoản trong vòng 24h</li>
-              <li>Bạn có thể thêm tối đa 5 tài khoản ngân hàng</li>
-              <li>Chỉ tài khoản đã xác minh mới có thể sử dụng cho giao dịch P2P</li>
-            </ul>
+          <div className="bank-info-layout">
+            <div className="bank-note-card">
+              <h3>Lưu ý quan trọng</h3>
+              <ul>
+                <li>Tài khoản ngân hàng phải trùng tên với chủ tài khoản Cexora</li>
+                <li>Hệ thống sẽ xác minh tài khoản trong vòng 24 giờ</li>
+                <li>Mỗi người dùng có thể liên kết tối đa 5 tài khoản</li>
+                <li>Chỉ tài khoản đã xác minh mới có thể sử dụng cho giao dịch P2P</li>
+              </ul>
+            </div>
+
+            <div className="bank-history-card">
+              <div className="panel-header">
+                <div>
+                  <h3>Lịch sử chuyển khoản</h3>
+                  <p className="panel-sub">Theo dõi dòng tiền vào/ra tài khoản ngân hàng</p>
+                </div>
+                <span className="badge">{transactions.length} giao dịch</span>
+              </div>
+
+              {transactionsLoading ? (
+                <p className="empty-state">Đang tải lịch sử giao dịch...</p>
+              ) : transactions.length === 0 ? (
+                <p className="empty-state">Chưa có giao dịch chuyển khoản nào</p>
+              ) : (
+                <div className="history-list">
+                  {transactions.map(renderTransaction)}
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -254,8 +382,8 @@ const BankAccountPage = () => {
         <div className="modal-overlay" onClick={() => setShowTransferModal(false)}>
           <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Chuyển khoản ngân hàng</h3>
-              <button className="modal-close" onClick={() => setShowTransferModal(false)}>×</button>
+              <h3>Chuyển khoản nội bộ</h3>
+              <button className="modal-close" onClick={() => setShowTransferModal(false)}>x</button>
             </div>
             <form onSubmit={handleTransferSubmit} className="transfer-form">
               <div className="form-group">
@@ -268,8 +396,8 @@ const BankAccountPage = () => {
                 >
                   <option value="">Chọn tài khoản nguồn</option>
                   {bankAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.bankName} - {acc.accountNumber}
+                    <option key={acc.account_number} value={acc.account_number}>
+                      {acc.bank_name} - {acc.account_number}
                     </option>
                   ))}
                 </select>
@@ -292,10 +420,11 @@ const BankAccountPage = () => {
                 <input
                   type="number"
                   className="form-input"
-                  placeholder="Nhập số tiền"
+                  placeholder="Nhập số tiền (VND)"
                   value={transferData.amount}
                   onChange={(e) => setTransferData({ ...transferData, amount: e.target.value })}
                   required
+                  min="0"
                 />
               </div>
 
@@ -314,22 +443,22 @@ const BankAccountPage = () => {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowTransferModal(false)}>
                   Hủy
                 </button>
-                <button type="submit" className="btn btn-primary btn-gradient">
-                  <FiSend /> Chuyển khoản
+                <button type="submit" className="btn btn-primary btn-gradient" disabled={loading}>
+                  <FiSend /> {loading ? 'Đang xử lý...' : 'Chuyển khoản'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-      
+
       {/* Add Bank Account Modal */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Thêm tài khoản ngân hàng</h3>
-              <button className="modal-close" onClick={() => setShowAddModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowAddModal(false)}>x</button>
             </div>
             <form onSubmit={handleAddAccountSubmit} className="transfer-form">
               <div className="form-group">

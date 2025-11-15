@@ -70,4 +70,70 @@ class BankAccount
         ");
         return $stmt->execute([$accountNumber]);
     }
+
+    private function lockAccount(string $accountNumber): ?array
+    {
+        $stmt = $this->db->prepare("
+            SELECT * FROM bank_accounts
+            WHERE account_number = ?
+            FOR UPDATE
+        ");
+        $stmt->execute([$accountNumber]);
+        $account = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $account ?: null;
+    }
+
+    /**
+     * Transfer funds between two bank accounts atomically.
+     *
+     * @throws \RuntimeException|\InvalidArgumentException on validation failure
+     */
+    public function transferFunds(string $sourceAccount, string $targetAccount, float $amount): array
+    {
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException('Transfer amount must be greater than zero');
+        }
+
+        if ($sourceAccount === $targetAccount) {
+            throw new \InvalidArgumentException('Source and destination accounts must be different');
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $source = $this->lockAccount($sourceAccount);
+            $target = $this->lockAccount($targetAccount);
+
+            if (!$source) {
+                throw new \RuntimeException('Source account not found');
+            }
+
+            if (!$target) {
+                throw new \RuntimeException('Destination account not found');
+            }
+
+            $sourceBalance = (float)$source['account_balance'];
+            if ($sourceBalance < $amount) {
+                throw new \RuntimeException('Insufficient balance in source account');
+            }
+
+            $this->updateBalance($sourceAccount, -$amount);
+            $this->updateBalance($targetAccount, $amount);
+
+            $updatedSource = $this->findByAccountNumber($sourceAccount);
+            $updatedTarget = $this->findByAccountNumber($targetAccount);
+
+            $this->db->commit();
+
+            return [
+                'source' => $updatedSource,
+                'target' => $updatedTarget,
+            ];
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
 }

@@ -3,6 +3,11 @@ import axios from 'axios';
 // Base URL for API - Change this to your backend URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
+const MAX_RETRY_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 800;
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -12,30 +17,46 @@ const api = axios.create({
   timeout: 10000,
 });
 
-// Add response interceptor for error handling
+// Add response interceptor for error handling + lightweight retries
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config || {};
+    const method = config.method ? config.method.toLowerCase() : 'get';
+    const isReadRequest = ['get', 'head'].includes(method);
+    const isTimeout = error.code === 'ECONNABORTED';
+    const isNetworkError = !error.response && (isTimeout || error.message === 'Network Error');
+
+    if (isNetworkError && isReadRequest) {
+      config.__retryCount = config.__retryCount || 0;
+      if (config.__retryCount < MAX_RETRY_ATTEMPTS) {
+        config.__retryCount += 1;
+        await delay(RETRY_DELAY_MS * config.__retryCount);
+        return api(config);
+      }
+    }
+
     if (error.response) {
       // Server responded with error status (4xx, 5xx)
       console.error('API Error:', error.response.data);
-      // Return the error data structure from backend
       return Promise.reject(error.response.data);
-    } else if (error.request) {
+    }
+
+    if (error.request) {
       // Request made but no response received
       console.error('Network Error:', error.message);
       return Promise.reject({ 
         success: false, 
-        message: 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.' 
-      });
-    } else {
-      // Something else happened in setting up the request
-      console.error('Error:', error.message);
-      return Promise.reject({ 
-        success: false, 
-        message: error.message || 'Đã xảy ra lỗi không xác định' 
+        message: 'Khong the ket noi den server. Vui long kiem tra ket noi mang.' 
       });
     }
+
+    // Something else happened in setting up the request
+    console.error('Error:', error.message);
+    return Promise.reject({ 
+      success: false, 
+      message: error.message || 'Da xay ra loi khong xac dinh' 
+    });
   }
 );
 
@@ -152,6 +173,35 @@ export const tradingAPI = {
     });
     return response.data;
   },
+
+  // Open a futures position (market only)
+  openFuturePosition: async ({ userId, walletId, symbol, side, margin, entryPrice, leverage }) => {
+    const response = await api.post('/trading/futures/open', {
+      user_id: userId,
+      wallet_id: walletId,
+      symbol,
+      side,
+      amount: margin,
+      entry_price: entryPrice,
+      leverage,
+    });
+    return response.data;
+  },
+
+  // Close a futures position
+  closeFuturePosition: async ({ orderId, userId, exitPrice }) => {
+    const response = await api.post(`/trading/futures/${orderId}/close`, {
+      user_id: userId,
+      exit_price: exitPrice,
+    });
+    return response.data;
+  },
+
+  // Fetch all open futures positions for the user
+  getOpenFutures: async (userId) => {
+    const response = await api.get(`/trading/futures/open?user_id=${userId}`);
+    return response.data;
+  },
 };
 
 // ============= P2P ENDPOINTS =============
@@ -223,6 +273,24 @@ export const bankAPI = {
       bank_name: bankName,
       account_balance: accountBalance,
     });
+    return response.data;
+  },
+
+  // Transfer funds between linked bank accounts
+  transferFunds: async (userId, { fromAccount, toAccount, amount, note }) => {
+    const response = await api.post('/bank/transfer', {
+      user_id: userId,
+      from_account: fromAccount,
+      to_account: toAccount,
+      amount,
+      note: note || '',
+    });
+    return response.data;
+  },
+
+  // Fetch recent bank transfer history
+  getTransactions: async (userId, limit = 50) => {
+    const response = await api.get(`/bank/transactions?user_id=${userId}&limit=${limit}`);
     return response.data;
   },
 

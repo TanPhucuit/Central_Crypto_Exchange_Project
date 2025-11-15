@@ -971,7 +971,231 @@
 }
 
 @media (max-width: 640px) {
-  .pnl-grid {
+.pnl-grid {
+  grid-template-columns: 1fr;
+}
+
+/* === Market-only layout === */
+.spot-trading-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.spot-layout {
+  display: flex;
+  gap: var(--spacing-xl);
+  align-items: flex-start;
+}
+
+.spot-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.spot-right {
+  width: 36%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.order-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.panel-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.side-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.side-switch button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.side-switch button.active.buy {
+  border-color: var(--success-color);
+  color: var(--success-color);
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.side-switch button.active.sell {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.order-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+}
+
+.order-field input {
+  width: 100%;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-color);
+}
+
+.order-summary,
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+  font-size: 14px;
+}
+
+.order-summary strong,
+.balance-row strong {
+  font-weight: 600;
+}
+
+.order-history-card .order-history-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.order-history-card .order-history-row:last-child {
+  border-bottom: none;
+}
+
+.order-history-card .tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.order-history-card .tag.buy {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success-color);
+}
+
+.order-history-card .tag.sell {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger-color);
+}
+
+.chart-card {
+  padding: var(--spacing-lg);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.market-stats .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.asset-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 20, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: var(--spacing-lg);
+  z-index: 1200;
+}
+
+.asset-drawer {
+  width: min(520px, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: var(--spacing-xl);
+  border-radius: 24px 24px 0 0;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.drawer-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.asset-row {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+}
+
+@media (max-width: 1024px) {
+  .spot-layout {
+    flex-direction: column;
+  }
+
+  .spot-right {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .side-switch {
     grid-template-columns: 1fr;
   }
+
+  .order-history-card .order-history-row {
+    grid-template-columns: 1fr;
+  }
+}
 }

@@ -1,18 +1,115 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  FiTrendingUp, 
-  FiDollarSign, 
-  FiPieChart, 
-  FiShield, 
-  FiZap, 
+import {
+  FiTrendingUp,
+  FiDollarSign,
+  FiPieChart,
+  FiShield,
+  FiZap,
   FiLock,
   FiUsers,
   FiAward,
   FiChevronDown,
-  FiChevronUp
+  FiChevronUp,
 } from 'react-icons/fi';
 import './HomePage.css';
+
+const faqItems = [
+  {
+    question: 'Cexora là gì?',
+    answer:
+      'Cexora (CryptoExchange Oracle) là sàn giao dịch tiền điện tử hàng đầu tại Việt Nam, cung cấp đầy đủ sản phẩm Spot, Futures, P2P với công nghệ Oracle và lớp bảo mật tiên tiến.',
+  },
+  {
+    question: 'Làm sao để bắt đầu giao dịch?',
+    answer:
+      'Chỉ cần đăng ký tài khoản, hoàn tất KYC, nạp tiền vào ví và bạn có thể giao dịch ngay trong vài phút với giao diện thân thiện.',
+  },
+  {
+    question: 'Phí giao dịch là bao nhiêu?',
+    answer:
+      'Phí giao dịch Spot mặc định chỉ 0.1%. Người dùng giao dịch khối lượng lớn sẽ được áp dụng cấp độ VIP giảm phí hấp dẫn.',
+  },
+  {
+    question: 'Cexora có an toàn không?',
+    answer:
+      '95% tài sản được lưu trữ ví lạnh, hỗ trợ xác thực hai lớp (2FA) và hệ thống giám sát thời gian thực giúp bảo vệ tài khoản tối đa.',
+  },
+  {
+    question: 'Tôi có thể rút tiền bằng cách nào?',
+    answer:
+      'Bạn có thể rút tiền trực tiếp về tài khoản ngân hàng qua P2P hoặc chuyển crypto về ví cá nhân. Thời gian xử lý chỉ từ 5-30 phút.',
+  },
+];
+
+const trustSignals = [
+  { icon: FiShield, label: 'Bảo mật cao' },
+  { icon: FiZap, label: 'Khớp lệnh tức thì' },
+  { icon: FiLock, label: '95% tài sản ví lạnh' },
+];
+
+const marketPulseRows = [
+  {
+    label: 'Khối lượng Futures (24h)',
+    value: '$8.4B',
+    pill: { tone: 'positive', text: '+4.5%' },
+  },
+  {
+    label: 'Đòn bẩy trung bình',
+    value: '3.2x',
+    pill: { tone: 'neutral', text: 'Ổn định' },
+  },
+];
+
+const pulseAssets = [
+  { pair: 'BTC/USDT', price: '$68,420', change: '+2.1%', tone: 'positive' },
+  { pair: 'ETH/USDT', price: '$3,240', change: '-0.8%', tone: 'negative' },
+  { pair: 'SOL/USDT', price: '$156', change: '+5.4%', tone: 'positive' },
+];
+
+const featureCards = [
+  {
+    icon: FiTrendingUp,
+    title: 'Giao dịch Spot',
+    description: 'Mua bán tức thời với giá thị trường minh bạch.',
+    link: '/trading/spot',
+  },
+  {
+    icon: FiPieChart,
+    title: 'Giao dịch Futures',
+    description: 'Chiến lược long/short linh hoạt cùng đòn bẩy tối đa 125x.',
+    link: '/trading/futures',
+  },
+  {
+    icon: FiDollarSign,
+    title: 'Giao dịch P2P',
+    description: 'Kết nối trực tiếp với merchant uy tín để nạp/rút VND.',
+    link: '/trading/p2p',
+  },
+];
+
+const benefitCards = [
+  {
+    icon: FiShield,
+    title: 'Bảo mật tuyệt đối',
+    description: 'Lưu trữ ví lạnh, đa chữ ký và giám sát thời gian thực.',
+  },
+  {
+    icon: FiZap,
+    title: 'Hiệu suất vượt trội',
+    description: 'Công nghệ Oracle giúp khớp lệnh trong vài phần nghìn giây.',
+  },
+  {
+    icon: FiDollarSign,
+    title: 'Phí siêu cạnh tranh',
+    description: 'Chỉ 0.1% cho Spot cùng nhiều chương trình hoàn phí.',
+  },
+  {
+    icon: FiUsers,
+    title: 'Hỗ trợ 24/7',
+    description: 'Đội ngũ CSKH song ngữ luôn sẵn sàng đồng hành cùng bạn.',
+  },
+];
 
 const HomePage = () => {
   const [activeAccordion, setActiveAccordion] = useState(null);
@@ -20,12 +117,11 @@ const HomePage = () => {
     users: 0,
     volume: 0,
     coins: 0,
-    countries: 0
+    countries: 0,
   });
 
-  // Animated counter effect
   useEffect(() => {
-    const duration = 2000; // 2 seconds
+    const duration = 2000;
     const steps = 60;
     const interval = duration / steps;
 
@@ -33,25 +129,22 @@ const HomePage = () => {
       users: 500000,
       volume: 5.2,
       coins: 200,
-      countries: 150
+      countries: 150,
     };
 
     let currentStep = 0;
-
     const timer = setInterval(() => {
-      currentStep++;
-      const progress = currentStep / steps;
-      
+      currentStep += 1;
+      const progress = Math.min(currentStep / steps, 1);
       setCounters({
         users: Math.floor(targets.users * progress),
         volume: (targets.volume * progress).toFixed(1),
         coins: Math.floor(targets.coins * progress),
-        countries: Math.floor(targets.countries * progress)
+        countries: Math.floor(targets.countries * progress),
       });
 
-      if (currentStep >= steps) {
+      if (progress === 1) {
         clearInterval(timer);
-        setCounters(targets);
       }
     }, interval);
 
@@ -59,119 +152,122 @@ const HomePage = () => {
   }, []);
 
   const toggleAccordion = (index) => {
-    setActiveAccordion(activeAccordion === index ? null : index);
+    setActiveAccordion((prev) => (prev === index ? null : index));
   };
-
-  const faqs = [
-    {
-      question: "Cexora là gì?",
-      answer: "Cexora (CryptoExchange Oracle) là sàn giao dịch tiền điện tử hàng đầu tại Việt Nam, cung cấp các dịch vụ giao dịch Spot, Futures, P2P với công nghệ Oracle tiên tiến và bảo mật cao."
-    },
-    {
-      question: "Làm sao để bắt đầu giao dịch?",
-      answer: "Bạn chỉ cần đăng ký tài khoản, xác thực danh tính (KYC), nạp tiền vào ví và bắt đầu giao dịch. Quy trình đơn giản chỉ mất vài phút."
-    },
-    {
-      question: "Phí giao dịch là bao nhiêu?",
-      answer: "Cexora áp dụng mức phí cạnh tranh chỉ 0.1% cho giao dịch Spot và có các chương trình giảm phí cho khối lượng giao dịch lớn."
-    },
-    {
-      question: "Cexora có an toàn không?",
-      answer: "Cexora sử dụng công nghệ bảo mật đa lớp, lưu trữ lạnh (cold storage) cho 95% tài sản, xác thực 2 yếu tố (2FA) và tuân thủ các tiêu chuẩn bảo mật quốc tế."
-    },
-    {
-      question: "Làm sao để rút tiền?",
-      answer: "Bạn có thể rút tiền về tài khoản ngân hàng thông qua P2P hoặc rút crypto về ví ngoài. Thời gian xử lý thường từ 5-30 phút tùy phương thức."
-    }
-  ];
 
   return (
     <div className="home-page">
-      {/* Hero Section */}
       <section className="hero-section">
         <div className="hero-background">
-          <div className="hero-glow hero-glow-1"></div>
-          <div className="hero-glow hero-glow-2"></div>
-          <div className="hero-glow hero-glow-3"></div>
+          <div className="hero-glow hero-glow-1" />
+          <div className="hero-glow hero-glow-2" />
+          <div className="hero-glow hero-glow-3" />
         </div>
-        <div className="hero-content">
-          <div className="hero-badge">
-            <FiAward /> #1 Crypto Exchange in Vietnam
-          </div>
-          <h1 className="hero-title">
-            Sàn Giao Dịch Crypto<br/>
-            <span className="gradient-text">Hàng Đầu Việt Nam</span>
-          </h1>
-          <p className="hero-description">
-            Giao dịch Bitcoin, Ethereum và 200+ loại crypto khác với công nghệ Oracle tiên tiến.
-            Bảo mật tuyệt đối, giao diện thân thiện, phí thấp nhất thị trường.
-          </p>
-          <div className="hero-actions">
-            <Link to="/register" className="btn btn-primary btn-large btn-glow">
-              Bắt đầu giao dịch
-            </Link>
-            <Link to="/market" className="btn btn-secondary btn-large">
-              Xem thị trường
-            </Link>
-          </div>
-          
-          {/* Trust Indicators */}
-          <div className="trust-indicators">
-            <div className="trust-item">
-              <FiShield className="trust-icon" />
-              <span>Bảo mật cao</span>
+
+        <div className="hero-grid">
+          <div className="hero-left">
+            <div className="hero-badge">
+              <FiAward /> #1 Crypto Exchange in Vietnam
             </div>
-            <div className="trust-item">
-              <FiZap className="trust-icon" />
-              <span>Giao dịch nhanh</span>
+            <h1 className="hero-title">
+              Sàn Giao Dịch Crypto<br />
+              <span className="gradient-text">Hàng Đầu Việt Nam</span>
+            </h1>
+            <p className="hero-description">
+              Giao dịch Bitcoin, Ethereum và hơn 200 tài sản số với công nghệ Oracle tiên tiến. Bảo mật
+              tuyệt đối, phí minh bạch và trải nghiệm mượt mà trên mọi thiết bị.
+            </p>
+            <div className="hero-actions">
+              <Link to="/register" className="btn btn-primary btn-large btn-glow">
+                Bắt đầu giao dịch
+              </Link>
+              <Link to="/market" className="btn btn-secondary btn-large btn-outline">
+                Xem thị trường
+              </Link>
             </div>
-            <div className="trust-item">
-              <FiLock className="trust-icon" />
-              <span>Ví lạnh 95%</span>
+
+            <div className="hero-metrics">
+              <div className="hero-metric">
+                <span className="metric-label">Người dùng</span>
+                <span className="metric-value">{counters.users.toLocaleString()}+</span>
+                <span className="metric-sub">đang tin tưởng Cexora</span>
+              </div>
+              <div className="hero-metric">
+                <span className="metric-label">Khối lượng 24h</span>
+                <span className="metric-value">${counters.volume}B</span>
+                <span className="metric-sub">thanh khoản mạnh mẽ</span>
+              </div>
+              <div className="hero-metric">
+                <span className="metric-label">Tài sản hỗ trợ</span>
+                <span className="metric-value">{counters.coins}+</span>
+                <span className="metric-sub">coin &amp; token niêm yết</span>
+              </div>
+            </div>
+
+            <div className="trust-indicators">
+              {trustSignals.map(({ icon: Icon, label }) => (
+                <div key={label} className="trust-item">
+                  <Icon className="trust-icon" />
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="hero-right">
+            <div className="hero-panel">
+              <div className="panel-header">
+                <span>Nhiệt độ thị trường</span>
+                <FiTrendingUp />
+              </div>
+              <div className="panel-body">
+                {marketPulseRows.map((row) => (
+                  <div className="panel-row" key={row.label}>
+                    <div>
+                      <p className="panel-label">{row.label}</p>
+                      <p className="panel-value">{row.value}</p>
+                    </div>
+                    <span className={`panel-pill ${row.pill.tone}`}>{row.pill.text}</span>
+                  </div>
+                ))}
+                <div className="panel-divider" />
+                <div className="panel-assets">
+                  {pulseAssets.map((asset) => (
+                    <div key={asset.pair} className="asset-pill">
+                      <span>{asset.pair}</span>
+                      <strong>{asset.price}</strong>
+                      <span className={asset.tone}>{asset.change}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="panel-footer">
+                <FiPieChart />
+                Cập nhật real-time qua mạng lưới Oracle
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <section className="features-section">
-        <h2 className="section-title">Các loại hình giao dịch</h2>
+        <h2 className="section-title">Các sản phẩm giao dịch</h2>
         <div className="features-grid">
-          <div className="feature-card">
-            <div className="feature-icon">
-              <FiTrendingUp size={40} />
+          {featureCards.map(({ icon: Icon, title, description, link }) => (
+            <div key={title} className="feature-card">
+              <div className="feature-icon">
+                <Icon size={40} />
+              </div>
+              <h3>{title}</h3>
+              <p>{description}</p>
+              <Link to={link} className="feature-link">
+                Giao dịch ngay →
+              </Link>
             </div>
-            <h3>Giao dịch Spot</h3>
-            <p>Mua bán tức thì với giá thị trường hiện tại</p>
-            <Link to="/trading/spot" className="feature-link">
-              Giao dịch ngay →
-            </Link>
-          </div>
-
-          <div className="feature-card">
-            <div className="feature-icon">
-              <FiPieChart size={40} />
-            </div>
-            <h3>Giao dịch Futures</h3>
-            <p>Giao dịch hợp đồng tương lai với đòn bẩy cao</p>
-            <Link to="/trading/futures" className="feature-link">
-              Giao dịch ngay →
-            </Link>
-          </div>
-
-          <div className="feature-card">
-            <div className="feature-icon">
-              <FiDollarSign size={40} />
-            </div>
-            <h3>Giao dịch P2P</h3>
-            <p>Mua bán trực tiếp với Merchant uy tín</p>
-            <Link to="/trading/p2p" className="feature-link">
-              Giao dịch ngay →
-            </Link>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* Animated Stats Section */}
       <section className="stats-section">
         <div className="stats-container">
           <div className="stat-item">
@@ -205,54 +301,27 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Why Choose Cexora */}
       <section className="why-choose-section">
         <h2 className="section-title">Tại sao chọn Cexora?</h2>
         <div className="benefits-grid">
-          <div className="benefit-card">
-            <div className="benefit-icon">
-              <FiShield />
+          {benefitCards.map(({ icon: Icon, title, description }) => (
+            <div key={title} className="benefit-card">
+              <div className="benefit-icon">
+                <Icon />
+              </div>
+              <h3>{title}</h3>
+              <p>{description}</p>
             </div>
-            <h3>Bảo mật tuyệt đối</h3>
-            <p>95% tài sản được lưu trữ trong ví lạnh, xác thực 2FA và công nghệ mã hóa tiên tiến</p>
-          </div>
-          <div className="benefit-card">
-            <div className="benefit-icon">
-              <FiZap />
-            </div>
-            <h3>Giao dịch siêu nhanh</h3>
-            <p>Công nghệ Oracle giúp xử lý giao dịch chỉ trong vài giây với độ chính xác cao</p>
-          </div>
-          <div className="benefit-card">
-            <div className="benefit-icon">
-              <FiDollarSign />
-            </div>
-            <h3>Phí thấp nhất</h3>
-            <p>Chỉ 0.1% phí giao dịch với chương trình giảm phí cho khối lượng lớn</p>
-          </div>
-          <div className="benefit-card">
-            <div className="benefit-icon">
-              <FiUsers />
-            </div>
-            <h3>Hỗ trợ 24/7</h3>
-            <p>Đội ngũ chăm sóc khách hàng chuyên nghiệp luôn sẵn sàng hỗ trợ bạn mọi lúc</p>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* FAQ Section */}
       <section className="faq-section">
         <h2 className="section-title">Câu hỏi thường gặp</h2>
         <div className="faq-container">
-          {faqs.map((faq, index) => (
-            <div 
-              key={index} 
-              className={`faq-item ${activeAccordion === index ? 'active' : ''}`}
-            >
-              <div 
-                className="faq-question" 
-                onClick={() => toggleAccordion(index)}
-              >
+          {faqItems.map((faq, index) => (
+            <div key={faq.question} className={`faq-item ${activeAccordion === index ? 'active' : ''}`}>
+              <div className="faq-question" onClick={() => toggleAccordion(index)}>
                 <h3>{faq.question}</h3>
                 {activeAccordion === index ? <FiChevronUp /> : <FiChevronDown />}
               </div>
@@ -264,11 +333,10 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
       <section className="cta-section">
         <div className="cta-content">
           <h2>Sẵn sàng bắt đầu giao dịch?</h2>
-          <p>Tham gia cùng 500,000+ người dùng đang giao dịch trên Cexora</p>
+          <p>Tham gia cùng 500,000+ nhà đầu tư đang phát triển tài sản trên Cexora.</p>
           <Link to="/register" className="btn btn-primary btn-large btn-glow">
             Đăng ký miễn phí
           </Link>
@@ -279,3 +347,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+

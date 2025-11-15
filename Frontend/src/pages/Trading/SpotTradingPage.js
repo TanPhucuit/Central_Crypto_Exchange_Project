@@ -1,320 +1,468 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiTrendingUp } from 'react-icons/fi';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FiPieChart, FiArrowUpCircle, FiArrowDownCircle, FiX } from 'react-icons/fi';
 import LivePriceChart from '../../components/LivePriceChart/LivePriceChart';
 import { useAuth } from '../../hooks/useAuth';
 import { walletAPI, tradingAPI } from '../../services/api';
+import cryptoWebSocket from '../../services/cryptoWebSocket';
+import binanceAPI from '../../services/binanceAPI';
 import './SpotTradingPage.css';
 
+const SUPPORTED_PAIRS = [
+  { symbol: 'BTC/USDT', name: 'Bitcoin', icon: '₿', price: 0 },
+  { symbol: 'ETH/USDT', name: 'Ethereum', icon: 'Ξ', price: 0 },
+  { symbol: 'BNB/USDT', name: 'BNB', icon: '◇', price: 0 },
+  { symbol: 'SOL/USDT', name: 'Solana', icon: '◎', price: 0 },
+  { symbol: 'XRP/USDT', name: 'Ripple', icon: '✦', price: 0 },
+  { symbol: 'ADA/USDT', name: 'Cardano', icon: '◈', price: 0 },
+];
+
+const formatNumber = (value, fractionDigits = 2) =>
+  Number(value || 0).toLocaleString('vi-VN', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+
+const resolveAssetSymbol = (symbol = '', pair = '') => {
+  if (!symbol) return pair;
+  if (symbol.includes('/')) return symbol;
+  return `${symbol.toUpperCase()}/USDT`;
+};
+
+const matchesAssetSymbol = (symbol = '', base, pair) => {
+  if (!symbol) return false;
+  return symbol.toUpperCase() === base.toUpperCase() || symbol.toUpperCase() === pair.toUpperCase();
+};
+
 const SpotTradingPage = () => {
-  const navigate = useNavigate();
   const { userId } = useAuth();
-  const [selectedPair, setSelectedPair] = useState(null);
-  const [orderType, setOrderType] = useState('limit'); // limit or market
-  const [side, setSide] = useState('buy'); // buy or sell
-  const [price, setPrice] = useState('');
+  const [selectedPair, setSelectedPair] = useState(SUPPORTED_PAIRS[0].symbol);
+  const [side, setSide] = useState('buy');
   const [amount, setAmount] = useState('');
+  const [spotWalletId, setSpotWalletId] = useState(null);
+  const [usdtBalance, setUsdtBalance] = useState(0);
+  const [holdings, setHoldings] = useState([]);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [openOrders, setOpenOrders] = useState([]);
+  const [priceTickers, setPriceTickers] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  
-  // Available coins from market (mock data - could use external API)
-  const [coins] = useState([
-    { symbol: 'BTC/USDT', name: 'Bitcoin', price: 45820, change: 2.5, volume: '1.2B' },
-    { symbol: 'ETH/USDT', name: 'Ethereum', price: 2000, change: -1.2, volume: '856M' },
-    { symbol: 'BNB/USDT', name: 'Binance Coin', price: 300, change: 3.8, volume: '450M' },
-    { symbol: 'SOL/USDT', name: 'Solana', price: 120, change: 5.2, volume: '320M' },
-    { symbol: 'XRP/USDT', name: 'Ripple', price: 0.52, change: -0.8, volume: '280M' },
-    { symbol: 'ADA/USDT', name: 'Cardano', price: 0.45, change: 1.5, volume: '150M' },
-  ]);
-  
-  // Real wallet balances from backend
-  const [usdtBalance, setUsdtBalance] = useState(0);
-  const [coinBalance, setCoinBalance] = useState(0);
-  const [openOrders, setOpenOrders] = useState([]);
-  
-  // Load wallet balances when pair is selected or on mount
-  useEffect(() => {
-    if (userId) {
-      loadWalletBalances();
-      loadOpenOrders();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, selectedPair]);
+  const [showAssets, setShowAssets] = useState(false);
 
-  const loadWalletBalances = async () => {
+  const baseAsset = useMemo(() => selectedPair.split('/')[0], [selectedPair]);
+  const selectedMeta = useMemo(
+    () => SUPPORTED_PAIRS.find((pair) => pair.symbol === selectedPair),
+    [selectedPair]
+  );
+  const activeTicker = priceTickers[selectedPair];
+  const activePrice = activeTicker?.price || selectedMeta?.price || 0;
+  const coinHolding = useMemo(
+    () => holdings.find((asset) => matchesAssetSymbol(asset.symbol, baseAsset, selectedPair)),
+    [holdings, baseAsset, selectedPair]
+  );
+  const coinBalance = coinHolding ? parseFloat(coinHolding.unit_number || 0) : 0;
+  const estimatedCost = parseFloat(amount || 0) * activePrice;
+
+  // Subscribe to Binance websocket streams once
+  useEffect(() => {
+    const unsubscribers = SUPPORTED_PAIRS.map(({ symbol }) => {
+      const streamSymbol = symbol.replace('/', '').toUpperCase();
+      return cryptoWebSocket.subscribe(streamSymbol, (ticker) => {
+        setPriceTickers((prev) => ({
+          ...prev,
+          [symbol]: {
+            price: ticker.price,
+            change: ticker.change24h,
+            changePercent: ticker.changePercent24h,
+            high: ticker.high24h,
+            low: ticker.low24h,
+            volume: ticker.volume24h,
+            timestamp: ticker.timestamp,
+          },
+        }));
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe && unsubscribe());
+    };
+  }, []);
+
+  // Fetch initial prices so UI has data before websocket pushes
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrapPrices = async () => {
+      try {
+        const results = await Promise.all(
+          SUPPORTED_PAIRS.map(async ({ symbol }) => {
+            const apiSymbol = symbol.replace('/', '');
+            const price = await binanceAPI.getCurrentPrice(apiSymbol);
+            return { symbol, price };
+          })
+        );
+
+        if (cancelled) return;
+        setPriceTickers((prev) => {
+          const next = { ...prev };
+          results.forEach(({ symbol, price }) => {
+            if (!price) return;
+            next[symbol] = {
+              ...(next[symbol] || {}),
+              price,
+            };
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error('Failed to bootstrap prices', err);
+      }
+    };
+
+    bootstrapPrices();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadSpotHoldings = async (walletId) => {
+    if (!walletId || !userId) return;
+    try {
+      setHoldingsLoading(true);
+      const response = await walletAPI.getWalletWithProperties(userId, walletId);
+      if (response.success && response.data) {
+        setUsdtBalance(parseFloat(response.data.balance) || 0);
+        setHoldings(response.data.properties || []);
+      }
+    } catch (err) {
+      console.error('Failed to load holdings', err);
+    } finally {
+      setHoldingsLoading(false);
+    }
+  };
+
+  const loadOpenOrders = async (walletId) => {
+    if (!walletId || !userId) {
+      setOpenOrders([]);
+      return;
+    }
+    try {
+      const response = await tradingAPI.getSpotHistory(userId, walletId);
+      if (response.success && Array.isArray(response.data)) {
+        setOpenOrders(response.data.slice(0, 5));
+      } else {
+        setOpenOrders([]);
+      }
+    } catch (err) {
+      console.error('Failed to load spot history', err);
+      setOpenOrders([]);
+    }
+  };
+
+  const loadWallets = async () => {
+    if (!userId) return;
     try {
       const response = await walletAPI.getWallets(userId);
-      
-      if (response.success && response.data) {
-        // Find USDT balance
-        const usdtWallet = response.data.find(w => w.symbol === 'USDT');
-        setUsdtBalance(usdtWallet ? parseFloat(usdtWallet.balance) : 0);
-        
-        // Find selected coin balance
-        if (selectedPair) {
-          const coinSymbol = selectedPair.split('/')[0];
-          const coinWallet = response.data.find(w => w.symbol === coinSymbol);
-          setCoinBalance(coinWallet ? parseFloat(coinWallet.balance) : 0);
+      if (response.success && Array.isArray(response.data)) {
+        const spotWallet = response.data.find((wallet) => wallet.type === 'spot');
+        if (spotWallet) {
+          setSpotWalletId(spotWallet.wallet_id);
+          setUsdtBalance(parseFloat(spotWallet.balance) || 0);
+          loadSpotHoldings(spotWallet.wallet_id);
+          loadOpenOrders(spotWallet.wallet_id);
+        } else {
+          setSpotWalletId(null);
+          setUsdtBalance(0);
+          setHoldings([]);
+          setOpenOrders([]);
         }
       }
     } catch (err) {
-      console.error('Error loading wallet balances:', err);
-    }
-  };
-  
-  const loadOpenOrders = async () => {
-    try {
-      const response = await tradingAPI.getSpotHistory(userId, 10);
-      
-      if (response.success && response.data) {
-        // Filter for pending orders only (if backend supports status)
-        setOpenOrders(response.data.slice(0, 5)); // Get last 5 transactions
-      }
-    } catch (err) {
-      console.error('Error loading open orders:', err);
+      console.error('Failed to load wallets', err);
+      setError('Không thể tải dữ liệu ví Spot');
     }
   };
 
+  useEffect(() => {
+    loadWallets();
+  }, [userId]);
+
+  useEffect(() => {
+    if (spotWalletId) {
+      loadSpotHoldings(spotWalletId);
+      loadOpenOrders(spotWalletId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotWalletId]);
+
   const handlePlaceOrder = async () => {
-    if (!selectedPair) {
-      setError('Vui lòng chọn cặp giao dịch!');
+    if (!userId || !spotWalletId) {
+      setError('Bạn chưa có ví Spot để giao dịch');
       return;
     }
-    
+
     if (!amount || parseFloat(amount) <= 0) {
-      setError('Vui lòng nhập số lượng hợp lệ!');
+      setError('Vui lòng nhập số lượng hợp lệ');
       return;
     }
-    
-    if (orderType === 'limit' && (!price || parseFloat(price) <= 0)) {
-      setError('Vui lòng nhập giá hợp lệ!');
+
+    if (!activePrice) {
+      setError('Không thể lấy giá thị trường. Vui lòng thử lại');
       return;
     }
-    
+
+    if (side === 'buy' && estimatedCost > usdtBalance) {
+      setError('Số dư USDT không đủ để mua');
+      return;
+    }
+
+    if (side === 'sell' && parseFloat(amount) > coinBalance) {
+      setError(`Bạn chỉ còn ${formatNumber(coinBalance)} ${baseAsset} để bán`);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      
-      const orderPrice = orderType === 'market' 
-        ? coins.find(c => c.symbol === selectedPair)?.price || 0
-        : parseFloat(price);
-      
-      const response = await tradingAPI.createSpotTransaction(userId, {
-        symbol: selectedPair,
-        type: orderType,
-        side: side,
-        amount: parseFloat(amount),
-        price: orderPrice,
-      });
-      
-      if (response.success) {
-        setSuccess(`Đặt lệnh ${side === 'buy' ? 'mua' : 'bán'} thành công!`);
-        setAmount('');
-        setPrice('');
-        
-        // Reload balances and orders
-        loadWalletBalances();
-        loadOpenOrders();
-        
-        setTimeout(() => setSuccess(null), 3000);
+
+      const quantity = parseFloat(amount);
+      if (side === 'buy') {
+        await tradingAPI.spotBuy(userId, spotWalletId, selectedPair, quantity, activePrice);
+      } else {
+        await tradingAPI.spotSell(userId, spotWalletId, selectedPair, quantity, activePrice);
       }
+
+      setSuccess(side === 'buy' ? 'Đặt lệnh mua thành công' : 'Đặt lệnh bán thành công');
+      setAmount('');
+      loadSpotHoldings(spotWalletId);
+      loadOpenOrders(spotWalletId);
     } catch (err) {
-      setError(err.message || 'Không thể đặt lệnh');
+      setError(err?.message || 'Không thể thực hiện lệnh. Vui lòng thử lại');
     } finally {
       setLoading(false);
+      setTimeout(() => setSuccess(null), 4000);
     }
   };
 
+  const renderOrderRow = (order) => {
+    const typeLabel = order.type === 'buy' ? 'Mua' : 'Bán';
+    const timestamp = order.ts ? new Date(order.ts).toLocaleString('vi-VN') : '--';
+    const orderBase = order.symbol?.includes('/') ? order.symbol.split('/')[0] : order.symbol;
+    return (
+      <div key={order.transaction_id} className="order-history-row">
+        <div>
+          <span className={`tag ${order.type}`}>{typeLabel}</span>
+          <p>{order.symbol}</p>
+        </div>
+        <div>
+          <strong>
+            {formatNumber(order.unit_numbers, 4)} {orderBase}
+          </strong>
+          <p className="text-secondary">@ {formatNumber(order.index_price)}</p>
+        </div>
+        <div className="text-right">
+          <span className="text-secondary">{timestamp}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const assetRows = holdings.map((asset) => {
+    const pairSymbol = resolveAssetSymbol(asset.symbol, selectedPair);
+    const price = priceTickers[pairSymbol]?.price || 0;
+    const value = price * parseFloat(asset.unit_number || 0);
+    return (
+      <div key={`${asset.wallet_id}-${asset.symbol}`} className="asset-row">
+        <div>
+          <strong>{asset.symbol}</strong>
+          <p className="text-secondary">Giá mua TB: {formatNumber(asset.average_buy_price || 0)}</p>
+        </div>
+        <div className="text-right">
+          <strong>{formatNumber(asset.unit_number || 0, 6)}</strong>
+          <p className="text-secondary">{value ? `${formatNumber(value)} USDT` : '--'}</p>
+        </div>
+      </div>
+    );
+  });
+
   return (
     <div className="spot-trading-page">
-      <div className="trading-header">
-        <h1>Giao dịch Spot</h1>
-        <p className="text-secondary">Chọn coin để bắt đầu giao dịch</p>
+      <div className="page-header">
+        <div>
+          <h1>Giao dịch Spot</h1>
+          <p className="text-secondary">Lệnh thị trường với dữ liệu giá real-time từ Binance</p>
+        </div>
+        <button className="btn btn-secondary" onClick={() => setShowAssets(true)}>
+          <FiPieChart /> Tài sản của tôi
+        </button>
       </div>
 
-      {/* Coins List */}
-      <div className="coins-section glass-card">
-        <h3>Danh sách Coins</h3>
-        <div className="coins-grid">
-          {coins.map((coin, index) => (
-            <div
-              key={index}
-              className={`coin-card ${selectedPair === coin.symbol ? 'active' : ''}`}
-              onClick={() => setSelectedPair(coin.symbol)}
-            >
-              <div className="coin-header">
-                <span className="coin-symbol">{coin.symbol}</span>
-                <span className={`coin-change ${coin.change >= 0 ? 'positive' : 'negative'}`}>
-                  {coin.change >= 0 ? '+' : ''}{coin.change}%
-                </span>
-              </div>
-              <div className="coin-price">${coin.price.toLocaleString()}</div>
-              <div className="coin-volume">Vol: {coin.volume}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {error && <div className="alert alert-danger">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
 
-      {!selectedPair ? (
-        <div className="empty-selection glass-card">
-          <h2>📊 Chọn coin để xem biểu đồ và giao dịch</h2>
-          <p>Vui lòng chọn một coin từ danh sách bên trên</p>
-        </div>
-      ) : (
-        <>
-          <div className="trading-pair-header">
-            <div className="pair-info">
-              <h2>{selectedPair}</h2>
-              <div className="pair-stats">
-                <span className="current-price">
-                  ${coins.find(c => c.symbol === selectedPair)?.price.toLocaleString()}
-                </span>
-                <span className={`price-change ${coins.find(c => c.symbol === selectedPair)?.change >= 0 ? 'text-success' : 'text-danger'}`}>
-                  {coins.find(c => c.symbol === selectedPair)?.change >= 0 ? '+' : ''}
-                  {coins.find(c => c.symbol === selectedPair)?.change}%
-                </span>
+      <div className="spot-layout">
+        <div className="spot-left">
+          <div className="coins-section glass-card">
+            <h3>Cặp giao dịch</h3>
+            <div className="coins-grid">
+              {SUPPORTED_PAIRS.map((pair) => {
+                const ticker = priceTickers[pair.symbol];
+                const isActive = pair.symbol === selectedPair;
+                return (
+                  <div
+                    key={pair.symbol}
+                    className={`coin-card ${isActive ? 'active' : ''}`}
+                    onClick={() => setSelectedPair(pair.symbol)}
+                  >
+                    <div className="coin-header">
+                      <span className="coin-icon">{pair.icon}</span>
+                      <div>
+                        <strong>{pair.symbol}</strong>
+                        <p className="text-secondary">{pair.name}</p>
+                      </div>
+                    </div>
+                    <div className="coin-price">
+                      ${formatNumber(ticker?.price || pair.price || 0, 2)}
+                    </div>
+                    <span className={`coin-change ${ticker?.changePercent >= 0 ? 'positive' : 'negative'}`}>
+                      {ticker?.changePercent ? `${ticker.changePercent.toFixed(2)}%` : '--'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="order-panel-binance">
+            <div className="order-panel-header">
+              <div>
+                <p className="text-secondary">Giá hiện tại</p>
+                <h2>${formatNumber(activePrice || 0, activePrice > 10 ? 2 : 4)}</h2>
+              </div>
+              <div className="panel-stats">
+                <span>Cao 24h: {formatNumber(activeTicker?.high || 0)}</span>
+                <span>Thấp 24h: {formatNumber(activeTicker?.low || 0)}</span>
               </div>
             </div>
-            {/* PnL Button in Header */}
-            <button className="btn-pnl-header btn-gradient" onClick={() => navigate('/trading/pnl-analytics')}>
-              <FiTrendingUp /> Phân Tích PnL
+
+            <div className="side-switch">
+              <button
+                className={side === 'buy' ? 'active buy' : ''}
+                onClick={() => setSide('buy')}
+              >
+                <FiArrowUpCircle /> Mua
+              </button>
+              <button
+                className={side === 'sell' ? 'active sell' : ''}
+                onClick={() => setSide('sell')}
+              >
+                <FiArrowDownCircle /> Bán
+              </button>
+            </div>
+
+            <div className="order-field">
+              <label>Số lượng ({baseAsset})</label>
+              <input
+                type="number"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={`Nhập số ${baseAsset} muốn ${side === 'buy' ? 'mua' : 'bán'}`}
+              />
+            </div>
+
+            <div className="order-summary">
+              <span>Giá thị trường</span>
+              <strong>${formatNumber(activePrice || 0, activePrice > 10 ? 2 : 4)}</strong>
+            </div>
+
+            <div className="order-summary">
+              <span>Tổng giá trị ước tính</span>
+              <strong>${formatNumber(estimatedCost || 0)}</strong>
+            </div>
+
+            <div className="balance-row">
+              <span>Số dư USDT</span>
+              <strong>{formatNumber(usdtBalance)}</strong>
+            </div>
+
+            <div className="balance-row">
+              <span>Số dư {baseAsset}</span>
+              <strong>{formatNumber(coinBalance, 6)}</strong>
+            </div>
+
+            <button className="btn btn-primary btn-gradient" onClick={handlePlaceOrder} disabled={loading}>
+              {loading ? 'Đang xử lý...' : side === 'buy' ? 'Mua ngay' : 'Bán ngay'}
             </button>
           </div>
 
-          {/* Full Width Chart Section */}
-          <div className="chart-full-section">
-            {selectedPair ? (
-              <LivePriceChart 
-                symbol={selectedPair.replace('/', '')} 
-                height={600} 
-              />
+          <div className="glass-card order-history-card">
+            <div className="card-header">
+              <h3>Lịch sử gần đây</h3>
+            </div>
+            {openOrders.length === 0 ? (
+              <p className="text-secondary">Chưa có giao dịch nào</p>
             ) : (
-              <div className="no-pair-selected">
-                <p>📊 Vui lòng chọn cặp giao dịch để xem biểu đồ nến</p>
-              </div>
+              openOrders.map(renderOrderRow)
             )}
           </div>
+        </div>
 
-          {/* Binance-style Order Panel */}
-          <div className="order-panel-binance">
-            {/* Buy Side */}
-            <div className="order-side buy-side">
-              <div className="order-type-tabs">
-                <button className={`type-tab ${orderType === 'limit' ? 'active' : ''}`} onClick={() => setOrderType('limit')}>
-                  Giới hạn
-                </button>
-                <button className={`type-tab ${orderType === 'market' ? 'active' : ''}`} onClick={() => setOrderType('market')}>
-                  Thị trường
-                </button>
-                <button className="type-tab">Stop Limit</button>
-              </div>
-
-              <div className="balance-row">
-                <span className="label">Khả dụng</span>
-                <span className="value">{usdtBalance.toLocaleString()} USDT</span>
-              </div>
-
-              {orderType === 'limit' && (
-                <div className="input-group">
-                  <label>Giá</label>
-                  <div className="input-box">
-                    <input type="number" placeholder="0.00" value={price} onChange={(e) => setPrice(e.target.value)} />
-                    <span className="suffix">USDT</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="input-group">
-                <label>Số lượng</label>
-                <div className="input-box">
-                  <input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                  <span className="suffix">{selectedPair?.split('/')[0]}</span>
-                </div>
-              </div>
-
-              <div className="percentage-buttons">
-                <button className="pct-btn">25%</button>
-                <button className="pct-btn">50%</button>
-                <button className="pct-btn">75%</button>
-                <button className="pct-btn">100%</button>
-              </div>
-
-              <div className="total-row">
-                <span className="label">Tổng</span>
-                <span className="value">0.00 USDT</span>
-              </div>
-
-              <button className="btn-trade btn-buy" onClick={handlePlaceOrder}>
-                Mua {selectedPair?.split('/')[0]}
+        <div className="spot-right">
+          <div className="chart-card glass-card">
+            <div className="chart-header">
+              <h3>Biểu đồ giá {selectedPair}</h3>
+              <button className="btn-text" onClick={() => setShowAssets(true)}>
+                <FiPieChart /> Danh mục coin
               </button>
             </div>
-
-            {/* Sell Side */}
-            <div className="order-side sell-side">
-              <div className="order-type-tabs">
-                <button className={`type-tab ${orderType === 'limit' ? 'active' : ''}`} onClick={() => setOrderType('limit')}>
-                  Giới hạn
-                </button>
-                <button className={`type-tab ${orderType === 'market' ? 'active' : ''}`} onClick={() => setOrderType('market')}>
-                  Thị trường
-                </button>
-                <button className="type-tab">Stop Limit</button>
-              </div>
-
-              <div className="balance-row">
-                <span className="label">Khả dụng</span>
-                <span className="value">{coins.find(c => c.symbol === selectedPair)?.walletBalance || 0} {selectedPair?.split('/')[0]}</span>
-              </div>
-
-              {orderType === 'limit' && (
-                <div className="input-group">
-                  <label>Giá</label>
-                  <div className="input-box">
-                    <input type="number" placeholder="0.00" value={price} onChange={(e) => setPrice(e.target.value)} />
-                    <span className="suffix">USDT</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="input-group">
-                <label>Số lượng</label>
-                <div className="input-box">
-                  <input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                  <span className="suffix">{selectedPair?.split('/')[0]}</span>
-                </div>
-              </div>
-
-              <div className="percentage-buttons">
-                <button className="pct-btn">25%</button>
-                <button className="pct-btn">50%</button>
-                <button className="pct-btn">75%</button>
-                <button className="pct-btn">100%</button>
-              </div>
-
-              <div className="total-row">
-                <span className="label">Tổng</span>
-                <span className="value">0.00 USDT</span>
-              </div>
-
-              <button className="btn-trade btn-sell" onClick={handlePlaceOrder}>
-                Bán {selectedPair?.split('/')[0]}
-              </button>
-            </div>
+            <LivePriceChart symbol={selectedPair.replace('/', '')} height={520} />
           </div>
 
-          <div className="open-orders-section">
-        <div className="section-header">
-          <h4>Lệnh mở</h4>
-          <button className="btn-text">Hủy tất cả</button>
-        </div>
-        <div className="orders-table">
-          <div className="empty-state">
-            <p>Không có lệnh nào đang mở</p>
+          <div className="market-stats glass-card">
+            <h3>Số liệu thị trường</h3>
+            <div className="stats-grid">
+              <div>
+                <p className="text-secondary">Khối lượng 24h</p>
+                <strong>{formatNumber(activeTicker?.volume || 0)}</strong>
+              </div>
+              <div>
+                <p className="text-secondary">Thay đổi 24h</p>
+                <strong className={activeTicker?.changePercent >= 0 ? 'text-success' : 'text-danger'}>
+                  {activeTicker?.changePercent ? `${activeTicker.changePercent.toFixed(2)}%` : '--'}
+                </strong>
+              </div>
+              <div>
+                <p className="text-secondary">Thời gian cập nhật</p>
+                <strong>
+                  {activeTicker?.timestamp ? new Date(activeTicker.timestamp).toLocaleTimeString('vi-VN') : '--'}
+                </strong>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-        </>
+
+      {showAssets && (
+        <div className="asset-drawer-overlay" onClick={() => setShowAssets(false)}>
+          <div className="asset-drawer glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div>
+                <h3>Tài sản Spot</h3>
+                <p className="text-secondary">{holdings.length} loại coin đang nắm giữ</p>
+              </div>
+              <button className="drawer-close" onClick={() => setShowAssets(false)}>
+                <FiX />
+              </button>
+            </div>
+            {holdingsLoading ? (
+              <p>Đang tải dữ liệu...</p>
+            ) : holdings.length === 0 ? (
+              <p className="text-secondary">Chưa có tài sản nào trong ví Spot</p>
+            ) : (
+              <div className="asset-list">{assetRows}</div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -736,9 +736,103 @@
     grid-template-columns: 1fr;
   }
   
-  .pnl-grid {
+.pnl-grid {
+  grid-template-columns: 1fr;
+}
+
+/* === Market-only futures layout === */
+.futures-grid {
+  display: flex;
+  gap: var(--spacing-xl);
+  align-items: flex-start;
+}
+
+.futures-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.futures-right {
+  width: 38%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.wallet-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.wallet-banner .badge {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--primary-color);
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.futures-order-panel .alert {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.lever-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-lg);
+}
+
+.lever-field input[type='range'] {
+  width: 100%;
+}
+
+.positions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.position-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.position-row .text-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1024px) {
+  .futures-grid {
+    flex-direction: column;
+  }
+
+  .futures-right {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .position-row {
     grid-template-columns: 1fr;
   }
+}
   
   .chart-full-section {
     padding: var(--spacing-sm);

@@ -2,7 +2,9 @@
 
 namespace App\Controllers;
 
+use App\Helpers\Database;
 use App\Helpers\Response;
+use App\Models\InternalTransfer;
 use App\Models\Wallet;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -100,5 +102,76 @@ class WalletController
 
         $wallet = $walletModel->findById($walletId);
         return Response::success($response, $wallet, 'Wallet created', 201);
+    }
+
+    public function internalTransfer(Request $request, ResponseInterface $response): ResponseInterface
+    {
+        $data = $request->getParsedBody();
+        $userId = $data['user_id'] ?? null;
+        $fromType = $data['from_type'] ?? null;
+        $toType = $data['to_type'] ?? null;
+        $amount = isset($data['amount']) ? (float)$data['amount'] : null;
+        $note = $data['note'] ?? null;
+
+        if (!$userId || !$fromType || !$toType || !$amount) {
+            return Response::error($response, 'user_id, from_type, to_type and amount are required', 400);
+        }
+
+        if ($fromType === $toType) {
+            return Response::error($response, 'Source and target wallet types must be different', 400);
+        }
+
+        if (!in_array($fromType, ['spot', 'future'], true) || !in_array($toType, ['spot', 'future'], true)) {
+            return Response::error($response, 'Only spot and future wallets are supported', 400);
+        }
+
+        if ($amount <= 0) {
+            return Response::error($response, 'Amount must be greater than zero', 400);
+        }
+
+        $walletModel = new Wallet();
+        $source = $walletModel->getByUserIdAndType((int)$userId, $fromType);
+        $target = $walletModel->getByUserIdAndType((int)$userId, $toType);
+
+        if (!$source || !$target) {
+            return Response::error($response, 'Required wallets not found', 404);
+        }
+
+        $sourceBalance = (float)$source['balance'];
+        if ($sourceBalance < $amount) {
+            return Response::error($response, 'Insufficient balance in source wallet', 400);
+        }
+
+        $pdo = Database::getConnection();
+        try {
+            $pdo->beginTransaction();
+
+            $walletModel->setBalance($source['wallet_id'], $sourceBalance - $amount);
+            $walletModel->setBalance($target['wallet_id'], (float)$target['balance'] + $amount);
+
+            $transferModel = new InternalTransfer();
+            $transferId = $transferModel->create([
+                'source_wallet_id' => $source['wallet_id'],
+                'target_wallet_id' => $target['wallet_id'],
+                'transfer_amount' => $amount,
+                'note' => $note,
+            ]);
+
+            $pdo->commit();
+
+            $updatedSource = $walletModel->findById($source['wallet_id']);
+            $updatedTarget = $walletModel->findById($target['wallet_id']);
+
+            return Response::success($response, [
+                'transfer_id' => $transferId,
+                'source_wallet' => $updatedSource,
+                'target_wallet' => $updatedTarget,
+            ], 'Internal transfer completed');
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            return Response::error($response, 'Failed to complete transfer: ' . $e->getMessage(), 500);
+        }
     }
 }
