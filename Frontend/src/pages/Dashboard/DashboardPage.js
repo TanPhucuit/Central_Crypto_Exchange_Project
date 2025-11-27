@@ -1,326 +1,401 @@
-import React, { useEffect, useState } from 'react';
-import { FiDollarSign, FiTrendingUp, FiTrendingDown, FiActivity, FiDownload } from 'react-icons/fi';
-import { tradingAPI, dashboardAPI } from '../../services/api';
-import useAuth from '../../hooks/useAuth';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import './DashboardPage.css';
+import {
+    FiDollarSign,
+    FiTrendingUp,
+    FiTrendingDown,
+    FiPieChart,
+    FiActivity,
+    FiBarChart2,
+    FiZap,
+    FiShield
+} from 'react-icons/fi';
+import { walletAPI, tradingAPI } from '../../services/api';
+import cryptoWebSocket from '../../services/cryptoWebSocket';
+import TotalProfitChart from '../../components/ProfitChart/TotalProfitChart';
+import FutureProfitChart from '../../components/ProfitChart/FutureProfitChart';
+import SpotProfitChart from '../../components/ProfitChart/SpotProfitChart';
 
 const DashboardPage = () => {
-  const { user, userId } = useAuth();
-  const [wallets, setWallets] = useState([]);
-  const [recentTransactions, setRecentTransactions] = useState([]);
-  const [spotWalletId, setSpotWalletId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    totalBalance: 0,
-    availableBalance: 0,
-    lockedBalance: 0,
-    profitLoss: 0,
-    profitLossPercent: 0,
-  });
+    const { user } = useSelector((state) => state.auth);
+    const [wallets, setWallets] = useState([]);
+    const [spotAssets, setSpotAssets] = useState([]);
+    const [futuresPositions, setFuturesPositions] = useState([]);
+    const [futuresHistory, setFuturesHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [prices, setPrices] = useState({});
 
-  useEffect(() => {
-    if (userId) {
-      loadDashboardData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+    const iconMap = {
+        BTC: '₿',
+        ETH: 'Ξ',
+        USDT: '₮',
+        BNB: 'BNB',
+        SOL: 'SOL',
+        XRP: 'XRP',
+        ADA: 'ADA',
+        DOT: 'DOT',
+        DOGE: 'Ð',
+        AVAX: 'AVAX',
+        LTC: 'Ł',
+    };
 
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Load wallet/summary data first (critical)
-      await loadWalletData();
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      setError(error.message || 'Không thể tải dữ liệu dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
+    useEffect(() => {
+        loadDashboardData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-  const loadWalletData = async () => {
-    try {
-      // Load dashboard summary with calculated assets
-      const response = await dashboardAPI.getSummary(userId);
-      
-      if (response.success && response.data) {
-        const summary = response.data;
-        
-        // Format wallet data for display
-        const formattedWallets = summary.wallets
-          .filter(wallet => wallet.total_value > 0)
-          .map(wallet => ({
-            wallet_id: wallet.wallet_id,
-            type: wallet.type,
-            balance: wallet.usdt_balance,
-            totalValue: wallet.total_value,
-            holdings: wallet.holdings,
-          }));
-        
-        setWallets(formattedWallets);
-        const spotWallet = summary.wallets.find((wallet) => wallet.type === 'spot');
-        setSpotWalletId(spotWallet?.wallet_id || null);
-        
-        // Update stats with calculated values
-        setStats({
-          totalBalance: summary.total_asset_value,
-          availableBalance: summary.available_balance,
-          lockedBalance: summary.locked_balance,
-          profitLoss: summary.profit_loss,
-          profitLossPercent: summary.profit_loss_percent,
+    // WebSocket Subscription
+    useEffect(() => {
+        const symbols = new Set();
+
+        // Add spot symbols
+        spotAssets.forEach(asset => {
+            if (asset.symbol && asset.symbol !== 'USDT') {
+                symbols.add(`${asset.symbol}USDT`);
+            }
         });
-      }
-    } catch (error) {
-      console.error('Error loading wallet data:', error);
-      throw error;
-    }
-  };
-  
-  useEffect(() => {
-    if (userId && spotWalletId) {
-      loadRecentTransactions(spotWalletId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, spotWalletId]);
 
-  const loadRecentTransactions = async (walletId) => {
-    if (!walletId) {
-      setRecentTransactions([]);
-      return;
-    }
+        // Add futures symbols
+        futuresPositions.forEach(pos => {
+            if (pos.symbol) {
+                symbols.add(pos.symbol.includes('USDT') ? pos.symbol : `${pos.symbol}USDT`);
+            }
+        });
 
-    try {
-      // Load recent spot transactions
-      const response = await tradingAPI.getSpotHistory(userId, walletId);
-      
-      if (response.success && response.data) {
-        const formatted = response.data.map(tx => ({
-          id: tx.transaction_id,
-          type: tx.side, // 'buy' or 'sell'
-          pair: tx.symbol || 'N/A',
-          amount: parseFloat(tx.amount || 0),
-          price: parseFloat(tx.price || 0),
-          timestamp: tx.timestamp,
-          status: 'completed',
-        }));
-        setRecentTransactions(formatted);
-      }
-    } catch (error) {
-      console.error('Error loading transactions:', error);
-      // Don't throw - transactions are not critical for dashboard
-    }
-  };
+        if (symbols.size === 0) return;
 
-  const handleExportReport = () => {
-    // TODO: Implement export report functionality
-    console.log('Exporting report...');
-    alert('Chức năng xuất báo cáo sẽ sớm được triển khai!');
-  };
+        const unsubscribers = [];
+        symbols.forEach(symbol => {
+            const unsub = cryptoWebSocket.subscribe(symbol, (data) => {
+                setPrices(prev => ({
+                    ...prev,
+                    [symbol]: parseFloat(data.price)
+                }));
+            });
+            unsubscribers.push(unsub);
+        });
 
-  return (
-    <div className="dashboard-page">
-      <div className="dashboard-header">
-        <div className="header-content">
-          <div>
-            <h1>Xin chào, {user?.username}!</h1>
-            <p className="text-secondary">Tổng quan tài khoản của bạn - User ID: {userId}</p>
-          </div>
-          <button className="btn-export btn-gradient" onClick={handleExportReport}>
-            <FiDownload /> Xuất Báo Cáo
-          </button>
-        </div>
-      </div>
+        return () => {
+            unsubscribers.forEach(unsub => unsub && unsub());
+        };
+    }, [spotAssets, futuresPositions]);
 
-      {loading ? (
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Đang tải dữ liệu...</p>
-        </div>
-      ) : (
-        <>
-          <div className="stats-cards">
-            <div className="stat-card">
-              <div className="stat-card-header">
-                <span className="stat-label">Tổng tài sản</span>
-                <FiDollarSign className="stat-icon" />
-              </div>
-              <h2 className="stat-value">${stats.totalBalance.toFixed(2)}</h2>
-              <div className={`stat-change ${stats.profitLossPercent >= 0 ? 'positive' : 'negative'}`}>
-                {stats.profitLossPercent >= 0 ? <FiTrendingUp /> : <FiTrendingDown />}
-                <span>{stats.profitLossPercent >= 0 ? '+' : ''}{stats.profitLossPercent}%</span>
-              </div>
-            </div>
+    const loadDashboardData = async () => {
+        try {
+            setLoading(true);
+            const userId = localStorage.getItem('user_id');
 
-            <div className="stat-card">
-              <div className="stat-card-header">
-                <span className="stat-label">Số dư khả dụng</span>
-                <FiActivity className="stat-icon" />
-              </div>
-              <h2 className="stat-value">${stats.availableBalance.toFixed(2)}</h2>
-              <p className="stat-description">Có thể giao dịch</p>
-            </div>
+            // Load wallets first
+            const walletsRes = await walletAPI.getWallets(userId);
+            const walletsData = Array.isArray(walletsRes) ? walletsRes : (walletsRes.data || []);
 
-            <div className="stat-card">
-              <div className="stat-card-header">
-                <span className="stat-label">Số dư bị khóa</span>
-                <FiActivity className="stat-icon" />
-              </div>
-              <h2 className="stat-value">${stats.lockedBalance.toFixed(2)}</h2>
-              <p className="stat-description">Trong lệnh chờ</p>
-            </div>
+            // Find spot and futures wallets
+            const spotWallet = walletsData.find(w => w.type === 'spot');
+            const futuresWallet = walletsData.find(w => w.type === 'future');
 
-            <div className="stat-card">
-              <div className="stat-card-header">
-                <span className="stat-label">Lãi/Lỗ hôm nay</span>
-                <FiTrendingUp className="stat-icon" />
-              </div>
-              <h2 className={`stat-value ${stats.profitLoss >= 0 ? 'text-success' : 'text-danger'}`}>
-                ${stats.profitLoss.toFixed(2)}
-              </h2>
-              <p className="stat-description">24h</p>
-            </div>
-          </div>
+            // Load spot assets, futures positions, and futures history
+            const promises = [
+                Promise.resolve(walletsData)
+            ];
 
-          <div className="dashboard-grid">
-        {/* Cexora Logo & Icons Section */}
-        <div className="cexora-showcase">
-          <div className="showcase-content">
-            <div className="logo-container">
-              <div className="logo-glow"></div>
-              <h1 className="cexora-logo">
-                <span className="logo-text">CEXORA</span>
-                <span className="logo-subtitle">Crypto Exchange Oracle</span>
-              </h1>
-            </div>
-            
-            <div className="animated-icons">
-              <div className="icon-item" style={{ animationDelay: '0s' }}>
-                <FiTrendingUp className="floating-icon" />
-                <span>Giao dịch</span>
-              </div>
-              <div className="icon-item" style={{ animationDelay: '0.2s' }}>
-                <FiDollarSign className="floating-icon" />
-                <span>Ví điện tử</span>
-              </div>
-              <div className="icon-item" style={{ animationDelay: '0.4s' }}>
-                <FiActivity className="floating-icon" />
-                <span>Thị trường</span>
-              </div>
-              <div className="icon-item" style={{ animationDelay: '0.6s' }}>
-                <FiDownload className="floating-icon" />
-                <span>Báo cáo</span>
-              </div>
-            </div>
+            if (spotWallet) {
+                promises.push(
+                    walletAPI.getWalletWithProperties(userId, spotWallet.wallet_id)
+                        .then(res => res.data?.properties || [])
+                        .catch(() => [])
+                );
+            } else {
+                promises.push(Promise.resolve([]));
+            }
 
-            <div className="showcase-stats">
-              <div className="showcase-stat">
-                <span className="stat-number">24/7</span>
-                <span className="stat-text">Hỗ trợ</span>
-              </div>
-              <div className="showcase-stat">
-                <span className="stat-number">100+</span>
-                <span className="stat-text">Crypto</span>
-              </div>
-              <div className="showcase-stat">
-                <span className="stat-number">0.1%</span>
-                <span className="stat-text">Phí thấp</span>
-              </div>
-            </div>
-          </div>
-        </div>
+            promises.push(
+                tradingAPI.getOpenFutures(userId)
+                    .then(res => Array.isArray(res) ? res : (res.data || []))
+                    .catch(() => [])
+            );
 
-        <div className="dashboard-card">
-          <div className="card-header">
-            <h3>Danh mục đầu tư</h3>
-          </div>
-          <div className="portfolio-list">
-            {wallets.length > 0 ? (
-              wallets.map((wallet) => (
-                <div key={wallet.wallet_id} className="portfolio-item">
-                  <div className="portfolio-info">
-                    <span className="portfolio-symbol">{wallet.symbol}</span>
-                    <span className="portfolio-name">{wallet.name}</span>
-                  </div>
-                  <div className="portfolio-values">
-                    <span className="portfolio-amount">
-                      {wallet.balance.toLocaleString('en-US', { 
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: wallet.symbol === 'BTC' ? 8 : 2 
-                      })} {wallet.symbol}
-                    </span>
-                    <span className="portfolio-value">
-                      ${wallet.balance.toLocaleString('en-US', { 
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2 
-                      })}
-                    </span>
-                  </div>
+            if (futuresWallet) {
+                promises.push(
+                    tradingAPI.getFutureHistory(userId, futuresWallet.wallet_id)
+                        .then(res => Array.isArray(res) ? res : (res.data || []))
+                        .catch(() => [])
+                );
+            } else {
+                promises.push(Promise.resolve([]));
+            }
+
+            const [wallets, spotData, futuresData, historyData] = await Promise.all(promises);
+
+            setWallets(wallets);
+            setSpotAssets(spotData);
+            setFuturesPositions(futuresData);
+            setFuturesHistory(historyData);
+
+            // Debug logs
+            console.log('Futures Positions:', futuresData);
+            console.log('Futures History:', historyData);
+
+        } catch (err) {
+            console.error('Failed to load dashboard data:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Calculate Statistics
+    const stats = useMemo(() => {
+        // 1. Calculate Spot Assets Value & PnL
+        let spotAssetsValue = 0;
+        let spotPnL = 0;
+
+        if (Array.isArray(spotAssets)) {
+            spotAssets.forEach(asset => {
+                if (asset.symbol === 'USDT') return;
+
+                const balance = parseFloat(asset.unit_number || 0);
+                const avgPrice = parseFloat(asset.average_buy_price || 0);
+                const pair = `${asset.symbol}USDT`;
+                // Use real-time price if available, else fallback to API current_price or avgPrice
+                const currentPrice = prices[pair] || parseFloat(asset.current_price || 0) || avgPrice || 0;
+
+                const value = balance * currentPrice;
+                spotAssetsValue += value;
+
+                if (avgPrice > 0) {
+                    spotPnL += (currentPrice - avgPrice) * balance;
+                }
+            });
+        }
+
+
+        // 2. Calculate Futures PnL (Unrealized + Realized)
+        let futuresUnrealizedPnL = 0;
+        if (Array.isArray(futuresPositions)) {
+            futuresPositions.forEach(pos => {
+                const pair = pos.symbol.includes('USDT') ? pos.symbol : `${pos.symbol}USDT`;
+                const currentPrice = prices[pair];
+
+                if (currentPrice && parseFloat(pos.entry_price) > 0) {
+                    const entry = parseFloat(pos.entry_price);
+                    const margin = parseFloat(pos.margin || 0);
+                    const leverage = parseFloat(pos.leverage || 1);
+                    // Use position_size if available, otherwise calculate from margin * leverage
+                    const positionSize = parseFloat(pos.position_size) || (margin * leverage);
+
+                    const sideMultiplier = (pos.side === 'buy' || pos.side === 'long') ? 1 : -1;
+
+                    // PnL = ((Current - Entry) / Entry) * PositionSize * SideMultiplier
+                    // Note: PositionSize is in USDT (Notional Value)
+                    futuresUnrealizedPnL += ((currentPrice - entry) / entry) * positionSize * sideMultiplier;
+                } else {
+                    futuresUnrealizedPnL += parseFloat(pos.unrealized_pnl || 0);
+                }
+            });
+        }
+
+        let futuresRealizedPnL = 0;
+        if (Array.isArray(futuresHistory)) {
+            futuresHistory.forEach(tx => {
+                if (tx.realized_pnl) {
+                    const val = parseFloat(tx.realized_pnl);
+                    if (!isNaN(val)) {
+                        futuresRealizedPnL += val;
+                    }
+                }
+            });
+        }
+
+        const futuresTotalPnL = futuresUnrealizedPnL + futuresRealizedPnL;
+
+        // 3. Total Assets
+        const spotWalletUSDT = parseFloat(wallets.find(w => w.type === 'spot')?.balance || 0);
+        const futuresWalletUSDT = parseFloat(wallets.find(w => w.type === 'future')?.balance || 0);
+
+        const totalAssets = spotWalletUSDT + futuresWalletUSDT + spotAssetsValue;
+
+        // 4. Total Profit
+        const totalProfit = spotPnL + futuresTotalPnL;
+
+        return {
+            totalAssets: isNaN(totalAssets) ? 0 : totalAssets,
+            spotProfit: isNaN(spotPnL) ? 0 : spotPnL,
+            futuresProfit: isNaN(futuresTotalPnL) ? 0 : futuresTotalPnL,
+            totalProfit: isNaN(totalProfit) ? 0 : totalProfit,
+            spotAssetsValue
+        };
+    }, [wallets, spotAssets, futuresPositions, futuresHistory, prices]);
+
+    const formatCurrency = (value) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(value);
+    };
+
+    const formatPercent = (value, total) => {
+        if (!total || total === 0) return '0.00%';
+        const percent = (value / total) * 100;
+        return `${value >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
+    };
+
+    if (loading) {
+        return (
+            <div className="dashboard-page">
+                <div className="dashboard-header">
+                    <h1>Dashboard</h1>
+                    <p className="text-secondary">Loading...</p>
                 </div>
-              ))
-            ) : (
-              <div className="empty-state">
-                <p>Chưa có tài sản nào trong ví</p>
-                <p className="text-secondary">Nạp tiền để bắt đầu giao dịch</p>
-              </div>
-            )}
-          </div>
             </div>
-          </div>
+        );
+    }
 
-          <div className="dashboard-card">
-            <div className="card-header">
-              <h3>Giao dịch gần đây</h3>
-        </div>
-        <div className="transactions-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Loại</th>
-                <th>Cặp giao dịch</th>
-                <th>Số lượng</th>
-                <th>Giá</th>
-                <th>Thời gian</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentTransactions.length > 0 ? (
-                recentTransactions.map((tx) => (
-                  <tr key={tx.id}>
-                    <td>
-                      <span className={`badge ${tx.type === 'buy' ? 'badge-success' : 'badge-danger'}`}>
-                        {tx.type === 'buy' ? 'Mua' : 'Bán'}
-                      </span>
-                    </td>
-                    <td>{tx.pair}</td>
-                    <td>{tx.amount.toFixed(4)} {tx.pair.split('/')[0]}</td>
-                    <td>${tx.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td>{new Date(tx.timestamp).toLocaleString('vi-VN')}</td>
-                    <td>
-                      <span className={`badge ${tx.status === 'completed' ? 'badge-completed' : 'badge-pending'}`}>
-                        {tx.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6" className="empty-state">
-                    <p>Chưa có giao dịch nào</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    return (
+        <div className="dashboard-page">
+            {/* Cexora Showcase Section */}
+            <div className="cexora-showcase">
+                <div className="showcase-content">
+                    <div className="logo-container">
+                        <div className="logo-glow"></div>
+                        <div className="cexora-logo">
+                            <div className="logo-text">CEXORA</div>
+                            <div className="logo-subtitle">Advanced Crypto Exchange</div>
+                        </div>
+                    </div>
+
+                    <div className="animated-icons">
+                        <div className="icon-item">
+                            <FiZap className="floating-icon" />
+                            <span>Lightning Fast</span>
+                        </div>
+                        <div className="icon-item">
+                            <FiShield className="floating-icon" />
+                            <span>Secure Trading</span>
+                        </div>
+                        <div className="icon-item">
+                            <FiActivity className="floating-icon" />
+                            <span>Real-time Data</span>
+                        </div>
+                        <div className="icon-item">
+                            <FiBarChart2 className="floating-icon" />
+                            <span>Advanced Charts</span>
+                        </div>
+                    </div>
+
+                    <div className="showcase-stats">
+                        <div className="showcase-stat">
+                            <div className="stat-number">24/7</div>
+                            <div className="stat-text">Trading</div>
+                        </div>
+                        <div className="showcase-stat">
+                            <div className="stat-number">100+</div>
+                            <div className="stat-text">Cryptocurrencies</div>
+                        </div>
+                        <div className="showcase-stat">
+                            <div className="stat-number">0.1%</div>
+                            <div className="stat-text">Low Fees</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+
+            {/* Dashboard Header */}
+            <div className="dashboard-header">
+                <div className="header-content">
+                    <div>
+                        <h1>Welcome back, {user?.username || 'Trader'}!</h1>
+                        <p className="text-secondary">Here's your portfolio overview</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="stats-cards">
+                {/* Card 1: Total Assets */}
+                <div className="stat-card">
+                    <div className="stat-card-header">
+                        <span className="stat-label">Tổng Tài Sản</span>
+                        <FiDollarSign className="stat-icon" />
+                    </div>
+                    <div className="stat-value">{formatCurrency(stats.totalAssets)}</div>
+                    <div className="stat-subtext">Bao gồm Spot & Futures</div>
+                </div>
+
+                {/* Card 2: Spot Profit */}
+                <div className="stat-card">
+                    <div className="stat-card-header">
+                        <span className="stat-label">Lợi Nhuận Spot</span>
+                        <FiPieChart className="stat-icon" />
+                    </div>
+                    <div className="stat-value">{formatCurrency(stats.spotProfit)}</div>
+                    <div className={`stat-change ${stats.spotProfit >= 0 ? 'positive' : 'negative'}`}>
+                        {stats.spotProfit >= 0 ? <FiTrendingUp /> : <FiTrendingDown />}
+                    </div>
+                </div>
+
+                {/* Card 3: Futures Profit */}
+                <div className="stat-card">
+                    <div className="stat-card-header">
+                        <span className="stat-label">Lợi Nhuận Futures</span>
+                        <FiActivity className="stat-icon" />
+                    </div>
+                    <div className="stat-value">{formatCurrency(stats.futuresProfit)}</div>
+                    <div className={`stat-change ${stats.futuresProfit >= 0 ? 'positive' : 'negative'}`}>
+                        {stats.futuresProfit >= 0 ? <FiTrendingUp /> : <FiTrendingDown />}
+                    </div>
+                </div>
+
+                {/* Card 4: Total Profit */}
+                <div className="stat-card">
+                    <div className="stat-card-header">
+                        <span className="stat-label">Tổng Lợi Nhuận</span>
+                        <FiTrendingUp className="stat-icon" />
+                    </div>
+                    <div className="stat-value">{formatCurrency(stats.totalProfit)}</div>
+                    <div className={`stat-change ${stats.totalProfit >= 0 ? 'positive' : 'negative'}`}>
+                        {stats.totalProfit >= 0 ? <FiTrendingUp /> : <FiTrendingDown />}
+                    </div>
+                </div>
+            </div>
+
+            {/* Profit Charts Section */}
+            <div className="charts-section">
+                <h2 className="section-title">Báo Cáo Lợi Nhuận</h2>
+                <div className="charts-grid">
+                    <div className="chart-card">
+                        <h3>Lợi Nhuận Spot</h3>
+                        <div className="chart-container">
+                            <SpotProfitChart
+                                spotHoldings={spotAssets}
+                                prices={prices}
+                            />
+                        </div>
+                    </div>
+                    <div className="chart-card">
+                        <h3>Lợi Nhuận Futures</h3>
+                        <div className="chart-container">
+                            <FutureProfitChart
+                                openPositions={futuresPositions}
+                                history={futuresHistory}
+                            />
+                        </div>
+                    </div>
+                    <div className="chart-card full-width">
+                        <h3>Tổng Lợi Nhuận</h3>
+                        <div className="chart-container">
+                            <TotalProfitChart
+                                spotHoldings={spotAssets}
+                                futurePositions={futuresPositions}
+                                futureHistory={futuresHistory}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default DashboardPage;

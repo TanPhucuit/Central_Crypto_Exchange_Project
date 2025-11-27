@@ -1,18 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { FiSend, FiArrowRightCircle, FiClock } from 'react-icons/fi';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FiSend, FiArrowRightCircle, FiClock, FiTrendingUp, FiTrendingDown, FiDollarSign } from 'react-icons/fi';
 import { useAuth } from '../../hooks/useAuth';
 import { walletAPI, tradingAPI } from '../../services/api';
+import cryptoWebSocket from '../../services/cryptoWebSocket';
+import binanceAPI from '../../services/binanceAPI';
 import './WalletPage.css';
 
 const WalletPage = () => {
   const { userId } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
   const [wallets, setWallets] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [spotWalletId, setSpotWalletId] = useState(null);
+  const [holdings, setHoldings] = useState([]);
+  const [priceTickers, setPriceTickers] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
+  // Transfer Modal State
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferData, setTransferData] = useState({
+    fromType: 'spot',
+    toType: 'future',
+    amount: '',
+    note: ''
+  });
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferMessage, setTransferMessage] = useState({ type: '', text: '' });
+
   // Icon mapping for different crypto symbols
   const iconMap = {
     BTC: '₿',
@@ -22,8 +36,18 @@ const WalletPage = () => {
     SOL: 'SOL',
     XRP: 'XRP',
     ADA: 'ADA',
+    DOT: 'DOT',
+    DOGE: 'Ð',
+    AVAX: 'AVAX',
+    LTC: 'Ł',
   };
-  
+
+  const formatNumber = (value, fractionDigits = 2) =>
+    Number(value || 0).toLocaleString('en-US', {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    });
+
   // Load wallet data on mount
   useEffect(() => {
     if (userId) {
@@ -35,18 +59,70 @@ const WalletPage = () => {
   useEffect(() => {
     if (userId && spotWalletId) {
       loadTransactions(spotWalletId);
+      loadSpotHoldings(spotWalletId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, spotWalletId]);
-  
+
+  // Subscribe to WebSocket for held assets
+  useEffect(() => {
+    if (holdings.length === 0) return;
+
+    const symbolsToSubscribe = holdings
+      .map(h => h.symbol)
+      .filter(s => s !== 'USDT')
+      .map(s => `${s}USDT`);
+
+    // Fetch initial prices
+    const fetchInitialPrices = async () => {
+      try {
+        const results = await Promise.all(
+          symbolsToSubscribe.map(async (symbol) => {
+            const price = await binanceAPI.getCurrentPrice(symbol);
+            return { symbol, price };
+          })
+        );
+
+        setPriceTickers(prev => {
+          const next = { ...prev };
+          results.forEach(({ symbol, price }) => {
+            if (price) next[symbol] = { price: parseFloat(price) };
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error('Failed to fetch initial prices', err);
+      }
+    };
+
+    fetchInitialPrices();
+
+    // Subscribe WS
+    const unsubscribers = symbolsToSubscribe.map(symbol => {
+      return cryptoWebSocket.subscribe(symbol, (ticker) => {
+        setPriceTickers(prev => ({
+          ...prev,
+          [symbol]: {
+            price: parseFloat(ticker.price),
+            change: parseFloat(ticker.change24h),
+            changePercent: parseFloat(ticker.changePercent24h),
+          }
+        }));
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub && unsub());
+    };
+  }, [holdings]);
+
   const loadWalletData = async () => {
     try {
       setLoading(true);
       setError(null);
-      setSpotWalletId(null);
 
       const response = await walletAPI.getWallets(userId);
-      
+
       if (response.success && response.data) {
         const spotWallet = response.data.find((wallet) => wallet.type === 'spot');
         setSpotWalletId(spotWallet?.wallet_id || null);
@@ -62,9 +138,10 @@ const WalletPage = () => {
             symbol,
             name: symbol,
             balance,
-            usdValue: balance, // TODO: replace with live price conversion
-            icon: iconMap[symbol] || symbol,
+            usdValue: balance, // Initial value, will be updated with total assets calculation
+            icon: iconMap[symbol] || symbol.charAt(0),
             wallet_id: wallet.wallet_id,
+            type: wallet.type
           };
         });
 
@@ -77,7 +154,20 @@ const WalletPage = () => {
       setLoading(false);
     }
   };
-  
+
+  const loadSpotHoldings = async (walletId) => {
+    try {
+      const response = await walletAPI.getWalletWithProperties(userId, walletId);
+      if (response.success && response.data) {
+        // Filter out USDT from properties list as it's the base currency
+        const props = (response.data.properties || []).filter(p => p.symbol !== 'USDT');
+        setHoldings(props);
+      }
+    } catch (err) {
+      console.error('Error loading spot holdings:', err);
+    }
+  };
+
   const loadTransactions = async (walletId) => {
     if (!walletId) {
       setTransactions([]);
@@ -85,15 +175,15 @@ const WalletPage = () => {
     }
 
     try {
-      // Load recent spot transactions
       const response = await tradingAPI.getSpotHistory(userId, walletId);
-      
+
       if (response.success && response.data) {
-        // Map backend transaction data to display format
         const formattedTransactions = response.data.map(tx => ({
-          type: tx.side === 'buy' ? 'deposit' : 'withdraw',
+          type: tx.side === 'buy' ? 'deposit' : 'withdraw', // Mapping buy/sell to deposit/withdraw for visual simplicity or keep as buy/sell
+          side: tx.side,
           symbol: tx.symbol ? tx.symbol.split('/')[0] : 'N/A',
           amount: parseFloat(tx.amount) || 0,
+          price: parseFloat(tx.price) || 0,
           time: new Date(tx.timestamp).toLocaleString('vi-VN'),
           status: 'completed',
           transaction_id: tx.transaction_id,
@@ -105,24 +195,87 @@ const WalletPage = () => {
     }
   };
 
-  // Calculate total balance
-  const totalBalance = wallets.reduce((sum, wallet) => sum + wallet.usdValue, 0);
-  
+  // Calculate Total Assets Value
+  const totalAssetsValue = useMemo(() => {
+    let total = 0;
+
+    // Add USDT balance
+    const usdtWallet = wallets.find(w => w.symbol === 'USDT');
+    if (usdtWallet) total += usdtWallet.balance;
+
+    // Add Futures balance (assuming 1:1 for now, or fetch if needed)
+    const futureWallet = wallets.find(w => w.type === 'future');
+    if (futureWallet) total += futureWallet.balance;
+
+    // Add Spot Holdings Value
+    holdings.forEach(asset => {
+      const pair = `${asset.symbol}USDT`;
+      const price = priceTickers[pair]?.price || 0; // Fallback to 0 if no price yet
+      // If no live price, try to use average_buy_price as fallback approximation? No, better 0 to avoid misleading.
+      // Actually, for total assets, we should use current market value.
+      total += (parseFloat(asset.unit_number) * price);
+    });
+
+    return total;
+    return total;
+  }, [wallets, holdings, priceTickers]);
+
+  const handleTransferSubmit = async (e) => {
+    e.preventDefault();
+    if (!transferData.amount || parseFloat(transferData.amount) <= 0) {
+      setTransferMessage({ type: 'error', text: 'Vui lòng nhập số tiền hợp lệ' });
+      return;
+    }
+
+    try {
+      setTransferLoading(true);
+      setTransferMessage({ type: '', text: '' });
+
+      const response = await walletAPI.internalTransfer(userId, {
+        fromType: transferData.fromType,
+        toType: transferData.toType,
+        amount: parseFloat(transferData.amount),
+        note: transferData.note
+      });
+
+      if (response.success) {
+        setTransferMessage({ type: 'success', text: 'Chuyển khoản thành công!' });
+        setTimeout(() => {
+          setShowTransferModal(false);
+          setTransferMessage({ type: '', text: '' });
+          setTransferData({ ...transferData, amount: '', note: '' });
+          loadWalletData(); // Reload balances
+        }, 1500);
+      }
+    } catch (err) {
+      setTransferMessage({ type: 'error', text: err.message || 'Chuyển khoản thất bại' });
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  const switchTransferDirection = () => {
+    setTransferData(prev => ({
+      ...prev,
+      fromType: prev.toType,
+      toType: prev.fromType
+    }));
+  };
+
   return (
     <div className="wallet-page">
       <div className="page-header">
         <h1>Ví của tôi</h1>
         <p className="text-secondary">Quản lý tài sản và giao dịch</p>
       </div>
-      
-      {/* Loading State */}
+
       {loading && (
         <div className="loading-message">
+          <div className="spinner"></div>
           <p>Đang tải dữ liệu ví...</p>
         </div>
       )}
-      
-      {/* Error State */}
+
       {error && (
         <div className="error-message">
           <p>⚠️ {error}</p>
@@ -131,25 +284,24 @@ const WalletPage = () => {
           </button>
         </div>
       )}
-      
-      {/* Main Content */}
+
       {!loading && !error && (
         <>
           <div className="wallet-hero">
             <div className="wallet-hero-info">
               <span className="eyebrow">Tổng tài sản ước tính</span>
-              <h2>${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+              <h2>${formatNumber(totalAssetsValue)} <span className="currency">USDT</span></h2>
               <p className="hero-subtitle">
                 {wallets.length > 0 ? `${wallets.length} ví đang hoạt động` : 'Chưa có ví nào được tạo'}
               </p>
               <div className="wallet-stat-row">
                 <div>
-                  <span className="stat-label">Ví Spot</span>
-                  <strong>{wallets.find(w => w.symbol === 'USDT')?.balance?.toLocaleString() || 0} USDT</strong>
+                  <span className="stat-label">Ví Spot (USDT)</span>
+                  <strong>{formatNumber(wallets.find(w => w.symbol === 'USDT')?.balance)}</strong>
                 </div>
                 <div>
                   <span className="stat-label">Ví Futures</span>
-                  <strong>{wallets.find(w => w.symbol === 'FUTURE')?.balance?.toLocaleString() || 0}</strong>
+                  <strong>{formatNumber(wallets.find(w => w.type === 'future')?.balance)}</strong>
                 </div>
               </div>
             </div>
@@ -160,93 +312,201 @@ const WalletPage = () => {
               <button className="action-chip">
                 <FiSend /> Rút tiền
               </button>
-              <button className="action-chip ghost">
+              <button className="action-chip">
+                <FiSend /> Rút tiền
+              </button>
+              <button className="action-chip ghost" onClick={() => setShowTransferModal(true)}>
                 <FiClock /> Chuyển nội bộ
               </button>
             </div>
           </div>
 
-          <div className="wallet-cards-grid">
-            {wallets.map((wallet) => (
-              <div key={wallet.wallet_id} className="wallet-card">
-                <div className="wallet-card-header">
-                  <div className="wallet-icon">{wallet.icon}</div>
-                  <div>
-                    <p className="wallet-label">{wallet.name}</p>
-                    <span className="wallet-type">{wallet.symbol === 'USDT' ? 'Ví Spot' : wallet.symbol}</span>
-                  </div>
-                </div>
-                <div className="wallet-card-body">
-                  <div>
-                    <span className="stat-label">Số dư</span>
-                    <h3>{wallet.balance.toLocaleString()} {wallet.symbol}</h3>
-                  </div>
-                  <span className="subtle">≈ ${wallet.usdValue.toLocaleString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
           <div className="wallet-layout">
-            <div className="wallet-assets-panel">
+            <div className="wallet-assets-panel full-width">
               <div className="panel-header">
                 <div>
-                  <h3>Tài sản đang nắm giữ</h3>
-                  <p className="panel-sub">Theo dõi danh mục và phân bổ tài sản của bạn</p>
+                  <h3>Danh mục Spot</h3>
+                  <p className="panel-sub">Tài sản Crypto đang nắm giữ</p>
                 </div>
-                <span className="badge">{wallets.length} ví</span>
               </div>
-              <div className="asset-table">
-                <div className="asset-row heading">
-                  <span>Tài sản</span>
-                  <span>Số dư</span>
-                  <span>Giá trị ước tính</span>
-                </div>
-                {wallets.map((wallet) => (
-                  <div key={`${wallet.wallet_id}-row`} className="asset-row">
-                    <span className="asset-name">{wallet.symbol}</span>
-                    <span>{wallet.balance.toLocaleString()} {wallet.symbol}</span>
-                    <span>${wallet.usdValue.toLocaleString()}</span>
-                  </div>
-                ))}
+
+              <div className="asset-table-container">
+                <table className="asset-table">
+                  <thead>
+                    <tr>
+                      <th>Tài sản</th>
+                      <th className="text-right">Số lượng</th>
+                      <th className="text-right">Giá TB</th>
+                      <th className="text-right">Giá hiện tại</th>
+                      <th className="text-right">Giá trị (USDT)</th>
+                      <th className="text-right">Lãi/Lỗ (PnL)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {holdings.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="empty-state">Chưa có tài sản nào</td>
+                      </tr>
+                    ) : (
+                      holdings.map((asset) => {
+                        const pair = `${asset.symbol}USDT`;
+                        const currentPrice = priceTickers[pair]?.price || 0;
+                        const avgPrice = parseFloat(asset.average_buy_price || 0);
+                        const balance = parseFloat(asset.unit_number || 0);
+                        const value = balance * currentPrice;
+
+                        // PnL Calculation
+                        const pnl = (currentPrice - avgPrice) * balance;
+                        const pnlPercent = avgPrice > 0 ? ((currentPrice - avgPrice) / avgPrice) * 100 : 0;
+                        const isPositive = pnl >= 0;
+
+                        return (
+                          <tr key={asset.symbol}>
+                            <td className="asset-cell">
+                              <div className="asset-icon-wrapper">
+                                {iconMap[asset.symbol] || asset.symbol.charAt(0)}
+                              </div>
+                              <div className="asset-info">
+                                <span className="asset-symbol">{asset.symbol}</span>
+                                <span className="asset-name">{asset.symbol} Token</span>
+                              </div>
+                            </td>
+                            <td className="text-right font-mono">{formatNumber(balance, 6)}</td>
+                            <td className="text-right font-mono">${formatNumber(avgPrice)}</td>
+                            <td className="text-right font-mono">
+                              {currentPrice > 0 ? `$${formatNumber(currentPrice)}` : <span className="loading-dots">...</span>}
+                            </td>
+                            <td className="text-right font-mono font-bold">${formatNumber(value)}</td>
+                            <td className="text-right">
+                              <div className={`pnl-badge ${isPositive ? 'positive' : 'negative'}`}>
+                                {isPositive ? <FiTrendingUp /> : <FiTrendingDown />}
+                                <span>${formatNumber(Math.abs(pnl))} ({formatNumber(pnlPercent)}%)</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            <div className="transactions-panel">
+
+
+            <div className="transactions-panel full-width">
               <div className="panel-header">
                 <div>
-                  <h3>Lịch sử giao dịch</h3>
-                  <p className="panel-sub">Các lệnh Spot gần đây nhất</p>
+                  <h3>Lịch sử giao dịch Spot</h3>
                 </div>
-                <button className="btn-text">Xem tất cả</button>
               </div>
-              <div className="transactions-timeline">
-                {transactions.length === 0 && (
-                  <p className="empty-state">Chưa có giao dịch nào</p>
-                )}
-                {transactions.map((tx) => (
-                  <div key={tx.transaction_id} className="timeline-item">
-                    <div className="timeline-dot" data-type={tx.type}></div>
-                    <div>
-                      <div className="timeline-top">
-                        <span className="timeline-type">{tx.type === 'deposit' ? 'Nạp' : tx.type === 'withdraw' ? 'Rút' : 'Chuyển'}</span>
-                        <span className="timeline-amount">
-                          {tx.type === 'withdraw' ? '-' : '+'}{tx.amount} {tx.symbol}
-                        </span>
-                      </div>
-                      <div className="timeline-bottom">
-                        <span>{tx.time}</span>
-                        <span className={`timeline-status ${tx.status}`}>{tx.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="transactions-table-container">
+                <table className="transactions-table">
+                  <thead>
+                    <tr>
+                      <th>Loại</th>
+                      <th>Cặp</th>
+                      <th>Giá</th>
+                      <th>Số lượng</th>
+                      <th>Tổng</th>
+                      <th>Thời gian</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.length === 0 ? (
+                      <tr><td colSpan="6" className="empty-state">Chưa có giao dịch nào</td></tr>
+                    ) : (
+                      transactions.map(tx => (
+                        <tr key={tx.transaction_id}>
+                          <td>
+                            <span className={`badge ${tx.side === 'buy' ? 'badge-success' : 'badge-danger'}`}>
+                              {tx.side === 'buy' ? 'Mua' : 'Bán'}
+                            </span>
+                          </td>
+                          <td>{tx.symbol}/USDT</td>
+                          <td>${formatNumber(tx.price)}</td>
+                          <td>{formatNumber(tx.amount, 6)}</td>
+                          <td>${formatNumber(tx.price * tx.amount)}</td>
+                          <td className="text-secondary">{tx.time}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
+          </div >
         </>
       )}
-    </div>
+
+      {/* Internal Transfer Modal */}
+      {
+        showTransferModal && (
+          <div className="modal-overlay" onClick={() => setShowTransferModal(false)}>
+            <div className="modal-content glass-card" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Chuyển khoản nội bộ</h3>
+                <button className="modal-close" onClick={() => setShowTransferModal(false)}>x</button>
+              </div>
+
+              <form onSubmit={handleTransferSubmit} className="transfer-form">
+                {transferMessage.text && (
+                  <div className={`alert alert-${transferMessage.type}`}>
+                    {transferMessage.text}
+                  </div>
+                )}
+
+                <div className="transfer-direction">
+                  <div className={`direction-box ${transferData.fromType}`}>
+                    <label>Từ</label>
+                    <div className="wallet-type-label">
+                      {transferData.fromType === 'spot' ? 'Ví Spot' : 'Ví Futures'}
+                    </div>
+                    <div className="wallet-balance-mini">
+                      Khả dụng: {formatNumber(wallets.find(w => w.type === transferData.fromType)?.balance)} USDT
+                    </div>
+                  </div>
+
+                  <div className="direction-arrow" onClick={switchTransferDirection}>
+                    <FiArrowRightCircle />
+                  </div>
+
+                  <div className={`direction-box ${transferData.toType}`}>
+                    <label>Đến</label>
+                    <div className="wallet-type-label">
+                      {transferData.toType === 'spot' ? 'Ví Spot' : 'Ví Futures'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Số lượng (USDT)</label>
+                  <div className="input-group">
+                    <input
+                      type="number"
+                      className="form-input"
+                      placeholder="0.00"
+                      value={transferData.amount}
+                      onChange={e => setTransferData({ ...transferData, amount: e.target.value })}
+                      min="0"
+                      step="0.01"
+                    />
+                    <span className="input-suffix">USDT</span>
+                  </div>
+                </div>
+
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowTransferModal(false)}>Hủy</button>
+                  <button type="submit" className="btn btn-primary" disabled={transferLoading}>
+                    {transferLoading ? 'Đang xử lý...' : 'Xác nhận chuyển'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
 

@@ -10,7 +10,6 @@ const ProfilePage = () => {
   const { userId } = useAuth();
   const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState('profile');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
@@ -37,9 +36,8 @@ const ProfilePage = () => {
 
   const loadProfileData = async () => {
     try {
-      setLoading(true);
       const response = await userAPI.getProfile(userId);
-      
+
       if (response.success && response.data) {
         setProfileData({
           username: response.data.username || '',
@@ -51,23 +49,20 @@ const ProfilePage = () => {
     } catch (err) {
       console.error('Error loading profile:', err);
       setError(err.message || 'Không thể tải thông tin profile');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     try {
-      setLoading(true);
       setError(null);
       setSuccess(null);
-      
+
       const response = await userAPI.updateProfile(userId, {
         full_name: profileData.fullName,
         phone_number: profileData.phoneNumber,
       });
-      
+
       if (response.success) {
         // Update Redux state
         dispatch(updateProfile({
@@ -81,35 +76,32 @@ const ProfilePage = () => {
       }
     } catch (err) {
       setError(err.message || 'Không thể cập nhật thông tin');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setError('Mật khẩu xác nhận không khớp!');
       return;
     }
-    
+
     if (passwordData.newPassword.length < 6) {
       setError('Mật khẩu mới phải có ít nhất 6 ký tự!');
       return;
     }
-    
+
     try {
-      setLoading(true);
       setError(null);
       setSuccess(null);
-      
+
       const response = await userAPI.changePassword(
         userId,
         passwordData.currentPassword,
         passwordData.newPassword
       );
-      
+
       if (response.success) {
         setSuccess('Đổi mật khẩu thành công!');
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -117,8 +109,6 @@ const ProfilePage = () => {
       }
     } catch (err) {
       setError(err.message || 'Không thể đổi mật khẩu');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -128,7 +118,7 @@ const ProfilePage = () => {
         <h1>Tài khoản của tôi</h1>
         <p className="text-secondary">Quản lý thông tin cá nhân và bảo mật</p>
       </div>
-      
+
       {/* Success/Error Messages */}
       {success && (
         <div className="alert alert-success">
@@ -309,5 +299,3 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
-
-

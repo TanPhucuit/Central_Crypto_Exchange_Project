@@ -128,13 +128,12 @@ class TradingController
 
         // Validation
         if (empty($data['user_id']) || empty($data['wallet_id']) || empty($data['symbol']) || empty($data['unit_numbers']) || empty($data['index_price'])) {
-            return Response::error($response, 'Missing required fields: user_id, wallet_id, symbol, unit_numbers, index_price', 400);
+            return Response::error($response, 'Missing required fields', 400);
         }
 
-        // Verify wallet ownership
         $walletModel = new Wallet();
         $wallet = $walletModel->findById($data['wallet_id']);
-        
+
         if (!$wallet || $wallet['user_id'] != $data['user_id']) {
             return Response::error($response, 'Wallet not found', 404);
         }
@@ -147,13 +146,14 @@ class TradingController
         $indexPrice = (float)$data['index_price'];
 
         if ($unitNumbers <= 0 || $indexPrice <= 0) {
-            return Response::error($response, 'unit_numbers and index_price must be greater than zero', 400);
+            return Response::error($response, 'Invalid quantity or price', 400);
         }
 
         $propertyModel = new Property();
         $property = $propertyModel->getByWalletAndSymbol($wallet['wallet_id'], $data['symbol']);
+
         if (!$property) {
-            return Response::error($response, 'Holding not found', 400);
+            return Response::error($response, 'Asset not found', 404);
         }
 
         $currentUnits = (float)$property['unit_number'];
@@ -173,10 +173,15 @@ class TradingController
 
             // Update holdings
             $propertyModel->updateUnitNumber($wallet['wallet_id'], $data['symbol'], -$unitNumbers);
+            
+            // Check if we need to delete the property or just leave it at 0
+            // Re-fetch to check balance
             $updatedProperty = $propertyModel->getByWalletAndSymbol($wallet['wallet_id'], $data['symbol']);
-            if ($updatedProperty && (float)$updatedProperty['unit_number'] <= 0) {
-                $propertyModel->delete($wallet['wallet_id'], $data['symbol']);
-                $updatedProperty = null;
+            if ($updatedProperty && (float)$updatedProperty['unit_number'] <= 0.00000001) {
+                 // Optional: Delete if 0, or keep. The original code deleted it.
+                 // Let's keep it simple and just update. If it's 0, it's 0.
+                 // But the original code had a delete logic. Let's respect that if we want to clean up.
+                 // $propertyModel->delete($wallet['wallet_id'], $data['symbol']);
             }
 
             // Update wallet balance
@@ -211,6 +216,13 @@ class TradingController
     {
         $data = $request->getParsedBody();
 
+        // Log incoming payload for debugging
+        try {
+            error_log('[openFuture] payload: ' . json_encode($data));
+        } catch (\Throwable $e) {
+            // ignore logging failures
+        }
+
         if (empty($data['user_id']) || empty($data['wallet_id']) || empty($data['symbol']) || empty($data['side']) || empty($data['amount']) || empty($data['entry_price']) || empty($data['leverage'])) {
             return Response::error($response, 'Missing required fields', 400);
         }
@@ -235,6 +247,16 @@ class TradingController
         $entryPrice = (float)$data['entry_price'];
         $leverage = (int)$data['leverage'];
 
+        // Normalize symbol to base asset (e.g. 'BTC' from 'BTC/USDT' or 'BTCUSDT')
+        $rawSymbol = $data['symbol'];
+        if (strpos($rawSymbol, '/') !== false) {
+            $symbol = explode('/', $rawSymbol)[0];
+        } else {
+            // handle cases like 'BTCUSDT' -> try to strip 'USDT' suffix
+            $symbol = preg_replace('/USDT$/i', '', $rawSymbol);
+        }
+        $symbol = strtoupper(trim($symbol));
+
         if ($margin <= 0 || $entryPrice <= 0) {
             return Response::error($response, 'Amount and entry price must be greater than zero', 400);
         }
@@ -247,7 +269,8 @@ class TradingController
             return Response::error($response, 'Insufficient margin balance', 400);
         }
 
-        $positionSize = ($margin * $leverage) / $entryPrice;
+        // Per product spec: position size = margin * leverage (user requested)
+        $positionSize = ($margin * $leverage);
 
         $db = Database::getConnection();
         $futureModel = new FutureOrder();
@@ -256,34 +279,68 @@ class TradingController
         try {
             $db->beginTransaction();
 
-            $walletModel->setBalance($wallet['wallet_id'], (float)$wallet['balance'] - $margin);
-
-            // Ensure a properties row exists for this wallet+symbol so FK constraint is satisfied.
-            $prop = $propertyModel->getByWalletAndSymbol($wallet['wallet_id'], $data['symbol']);
-            if (!$prop) {
-                // create a placeholder property with zero units (future positions don't require token units)
-                $propertyModel->create($wallet['wallet_id'], $data['symbol'], 0.0, 0.0);
+            // Deduct margin from wallet first
+            $updated = $walletModel->setBalance($wallet['wallet_id'], (float)$wallet['balance'] - $margin);
+            if (!$updated) {
+                throw new \RuntimeException('Failed to deduct margin from wallet');
             }
 
-            $orderId = $futureModel->create([
-                'wallet_id' => $wallet['wallet_id'],
-                'symbol' => $data['symbol'],
-                'side' => $side,
-                'entry_price' => $entryPrice,
-                'position_size' => $positionSize,
-                'margin' => $margin,
-                'leverage' => $leverage,
-            ]);
+            // Ensure a properties row exists for this wallet+symbol so FK constraint is satisfied.
+            $prop = $propertyModel->getByWalletAndSymbol($wallet['wallet_id'], $symbol);
+            if (!$prop) {
+                // create a placeholder property with zero units (future positions don't require token units)
+                try {
+                    $propertyModel->create($wallet['wallet_id'], $symbol, 0.0, 0.0);
+                } catch (\Throwable $pe) {
+                    // log and rethrow with context
+                    error_log('[openFuture] Property create error: ' . $pe->getMessage());
+                    throw $pe;
+                }
+                // Re-fetch to confirm
+                $prop = $propertyModel->getByWalletAndSymbol($wallet['wallet_id'], $symbol);
+                if (!$prop) {
+                    throw new \RuntimeException('Property record not found after create for symbol ' . $symbol);
+                }
+            }
+
+            // Create future order (persist computed position_size)
+            try {
+                $orderId = $futureModel->create([
+                    'wallet_id' => $wallet['wallet_id'],
+                    'symbol' => $symbol,
+                    'side' => $side,
+                    'entry_price' => $entryPrice,
+                    'position_size' => $positionSize,
+                    'margin' => $margin,
+                    'leverage' => $leverage,
+                ]);
+            } catch (\Throwable $fe) {
+                error_log('[openFuture] FutureOrder create error: ' . $fe->getMessage());
+                throw $fe;
+            }
+
+            if (empty($orderId)) {
+                throw new \RuntimeException('Failed to create future order (no id returned)');
+            }
 
             $db->commit();
 
+            // Return the created order row so frontend can display it immediately
+            $createdOrder = $futureModel->findById((int)$orderId);
+
             return Response::success($response, [
-                'order_id' => $orderId,
+                'order' => $createdOrder,
                 'wallet' => $walletModel->findById($wallet['wallet_id']),
             ], 'Future position opened', 201);
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();
+            }
+            // Log detailed exception for server-side diagnosis
+            try {
+                error_log('[openFuture] Exception: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            } catch (\Throwable $_) {
+                // ignore
             }
             return Response::error($response, 'Failed to open position: ' . $e->getMessage(), 500);
         }
@@ -301,44 +358,48 @@ class TradingController
         }
 
         $futureModel = new FutureOrder();
-        $order = $futureModel->findById($orderId);
-
-        if (!$order) {
-            return Response::error($response, 'Order not found', 404);
-        }
-
-        if ($order['close_ts'] !== null) {
-            return Response::error($response, 'Order already closed', 400);
-        }
-
-        $walletModel = new Wallet();
-        $wallet = $walletModel->findById($order['wallet_id']);
-
-        if (!$wallet || $wallet['user_id'] != $userId) {
-            return Response::error($response, 'Unauthorized', 403);
-        }
-
-        $entryPrice = (float)$order['entry_price'];
-        $positionSize = (float)$order['position_size'];
-        $margin = (float)$order['margin'];
-        $side = $order['side'];
-
-        $pnl = $side === 'long'
-            ? ($exitPrice - $entryPrice) * $positionSize
-            : ($entryPrice - $exitPrice) * $positionSize;
-
         $db = Database::getConnection();
 
         try {
             $db->beginTransaction();
 
+            // Lock the order row
+            $order = $futureModel->findByIdForUpdate($orderId);
+            if (!$order) {
+                throw new \RuntimeException('Order not found');
+            }
+            if ($order['close_ts'] !== null) {
+                throw new \RuntimeException('Order already closed');
+            }
+
+            $walletModel = new Wallet();
+            // Lock wallet row
+            $walletLockStmt = $db->prepare("SELECT * FROM wallets WHERE wallet_id = ? LIMIT 1 FOR UPDATE");
+            $walletLockStmt->execute([$order['wallet_id']]);
+            $lockedWallet = $walletLockStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$lockedWallet || $lockedWallet['user_id'] != $userId) {
+                throw new \RuntimeException('Unauthorized');
+            }
+
+            $entryPrice = (float)$order['entry_price'];
+            $positionSize = (float)$order['position_size'];
+            $margin = (float)$order['margin'];
+            $side = $order['side'];
+
+            $pnl = $side === 'long'
+                ? ($exitPrice - $entryPrice) * $positionSize
+                : ($entryPrice - $exitPrice) * $positionSize;
+
+            // Update order and wallet balance
             $futureModel->close($orderId, $exitPrice, $pnl);
-            $walletModel->setBalance($wallet['wallet_id'], (float)$wallet['balance'] + $margin + $pnl);
+            $newBalance = (float)$lockedWallet['balance'] + $margin + $pnl;
+            $walletModel->setBalance($lockedWallet['wallet_id'], $newBalance);
 
             $db->commit();
 
             return Response::success($response, [
-                'wallet' => $walletModel->findById($wallet['wallet_id']),
+                'wallet' => $walletModel->findById($lockedWallet['wallet_id']),
                 'order_id' => $orderId,
                 'profit' => $pnl,
             ], 'Future position closed');
@@ -346,6 +407,9 @@ class TradingController
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
+            try {
+                error_log('[closeFuture] Exception: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            } catch (\Throwable $_) {}
             return Response::error($response, 'Failed to close position: ' . $e->getMessage(), 500);
         }
     }
@@ -393,5 +457,47 @@ class TradingController
         $orders = $futureModel->getByWalletId($walletId);
 
         return Response::success($response, $orders);
+    }
+
+    /**
+     * Temporary debug endpoint to return INFORMATION_SCHEMA columns for future_orders.
+     * Call: GET /api/debug/future_schema
+     */
+    public function debugFutureSchema(Request $request, ResponseInterface $response): ResponseInterface
+    {
+        try {
+            $db = Database::getConnection();
+            $stmt = $db->prepare("SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'future_orders' ORDER BY ORDINAL_POSITION");
+            $stmt->execute();
+            $cols = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            return Response::success($response, $cols, 'future_orders schema');
+        } catch (\Throwable $e) {
+            try {
+                error_log('[debugFutureSchema] Exception: ' . $e->getMessage());
+            } catch (\Throwable $_) {}
+            return Response::error($response, 'Failed to fetch schema: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Debug endpoint to return recent future_orders rows.
+     * Call: GET /api/debug/future_orders_recent?limit=20
+     */
+    public function debugRecentFutureOrders(Request $request, ResponseInterface $response): ResponseInterface
+    {
+        $params = $request->getQueryParams();
+        $limit = isset($params['limit']) ? (int)$params['limit'] : 50;
+
+        try {
+            $db = Database::getConnection();
+            $futureModel = new FutureOrder();
+            $rows = $futureModel->getRecent($limit);
+            return Response::success($response, ['count' => count($rows), 'rows' => $rows], 'recent future_orders');
+        } catch (\Throwable $e) {
+            try {
+                error_log('[debugRecentFutureOrders] Exception: ' . $e->getMessage());
+            } catch (\Throwable $_) {}
+            return Response::error($response, 'Failed to fetch recent orders: ' . $e->getMessage(), 500);
+        }
     }
 }

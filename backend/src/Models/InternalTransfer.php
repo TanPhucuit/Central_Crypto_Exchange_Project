@@ -17,15 +17,14 @@ class InternalTransfer
     public function create(array $data): ?int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO internal_transfers (source_wallet_id, target_wallet_id, transfer_amount, note)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO internal_transfers (source_wallet_id, target_wallet_id, transfer_amount)
+            VALUES (?, ?, ?)
         ");
 
         $success = $stmt->execute([
             $data['source_wallet_id'],
             $data['target_wallet_id'],
             $data['transfer_amount'],
-            $data['note'] ?? null,
         ]);
 
         return $success ? (int)$this->db->lastInsertId() : null;

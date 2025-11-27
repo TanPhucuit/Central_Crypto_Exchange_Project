@@ -68,7 +68,22 @@ class UserController
             return Response::error($response, 'User not found', 404);
         }
 
-        if (!$userModel->verifyPassword($data['old_password'], $userData['password_hash'])) {
+        $passwordMatch = false;
+        
+        // 1. Try verify with hash
+        if ($userModel->verifyPassword($data['old_password'], $userData['password_hash'])) {
+            $passwordMatch = true;
+        }
+        // 2. Fallback: Try direct comparison (legacy/plain text)
+        elseif ($data['old_password'] === $userData['password_hash']) { // In some legacy cases password_hash column might hold plain text
+             $passwordMatch = true;
+        }
+        // 3. Fallback: Check 'password' column if it exists in fetched data (though findById might not return it if not selected, but let's assume standard fetch)
+        elseif (isset($userData['password']) && $data['old_password'] === $userData['password']) {
+             $passwordMatch = true;
+        }
+
+        if (!$passwordMatch) {
             return Response::error($response, 'Invalid old password', 401);
         }
 

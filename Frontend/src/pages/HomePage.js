@@ -120,6 +120,37 @@ const HomePage = () => {
     countries: 0,
   });
 
+  // Override MainLayout styles for Homepage
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    const sidebar = document.querySelector('.sidebar');
+
+    // Store original styles
+    const originalMarginLeft = mainContent ? mainContent.style.marginLeft : '';
+    const originalPadding = mainContent ? mainContent.style.padding : '';
+    const originalDisplay = sidebar ? sidebar.style.display : '';
+
+    // Apply overrides
+    if (mainContent) {
+      mainContent.style.marginLeft = '0';
+      mainContent.style.padding = '0';
+    }
+    if (sidebar) {
+      sidebar.style.display = 'none';
+    }
+
+    // Cleanup
+    return () => {
+      if (mainContent) {
+        mainContent.style.marginLeft = originalMarginLeft;
+        mainContent.style.padding = originalPadding;
+      }
+      if (sidebar) {
+        sidebar.style.display = originalDisplay;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const duration = 2000;
     const steps = 60;

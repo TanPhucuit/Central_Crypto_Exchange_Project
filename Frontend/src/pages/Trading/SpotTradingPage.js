@@ -270,19 +270,52 @@ const SpotTradingPage = () => {
   };
 
   const assetRows = holdings.map((asset) => {
-    const pairSymbol = resolveAssetSymbol(asset.symbol, selectedPair);
-    const price = priceTickers[pairSymbol]?.price || 0;
-    const value = price * parseFloat(asset.unit_number || 0);
+    // Find icon
+    const pairInfo = SUPPORTED_PAIRS.find(p => p.symbol.startsWith(asset.symbol + '/') || p.symbol === asset.symbol);
+    const icon = pairInfo ? pairInfo.icon : (asset.symbol === 'USDT' ? '₮' : '○');
+
+    // Find price
+    let currentPrice = 0;
+    if (asset.symbol === 'USDT') {
+      currentPrice = 1;
+    } else {
+      const pairSymbol = `${asset.symbol}/USDT`;
+      currentPrice = priceTickers[pairSymbol]?.price || 0;
+    }
+
+    const balance = parseFloat(asset.unit_number || 0);
+    const value = currentPrice * balance;
+    const avgPrice = parseFloat(asset.average_buy_price || 0);
+
+    let pnl = 0;
+    let pnlPercent = 0;
+
+    if (asset.symbol !== 'USDT' && avgPrice > 0 && currentPrice > 0) {
+      pnl = (currentPrice - avgPrice) * balance;
+      pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
+    }
+
     return (
-      <div key={`${asset.wallet_id}-${asset.symbol}`} className="asset-row">
-        <div>
-          <strong>{asset.symbol}</strong>
-          <p className="text-secondary">Giá mua TB: {formatNumber(asset.average_buy_price || 0)}</p>
+      <div key={`${asset.wallet_id}-${asset.symbol}`} className="asset-row glass-effect">
+        <div className="asset-col-left">
+          <div className="asset-icon-wrapper">{icon}</div>
+          <div className="asset-details">
+            <div className="asset-symbol">{asset.symbol}</div>
+            <div className="asset-avg-price">Avg: {formatNumber(avgPrice)}</div>
+          </div>
         </div>
-        <div className="text-right">
-          <strong>{formatNumber(asset.unit_number || 0, 6)}</strong>
-          <p className="text-secondary">{value ? `${formatNumber(value)} USDT` : '--'}</p>
+
+        <div className="asset-col-right">
+          <div className="asset-balance">{formatNumber(balance, 6)}</div>
+          <div className="asset-value-usdt">{value ? `≈ ${formatNumber(value)} USDT` : '--'}</div>
         </div>
+
+        {asset.symbol !== 'USDT' && avgPrice > 0 && (
+          <div className={`asset-pnl ${pnl >= 0 ? 'positive' : 'negative'}`}>
+            <div className="pnl-value">{pnl >= 0 ? '+' : ''}{formatNumber(pnl)} $</div>
+            <div className="pnl-percent">{pnl >= 0 ? '+' : ''}{formatNumber(pnlPercent)}%</div>
+          </div>
+        )}
       </div>
     );
   });
@@ -461,6 +494,14 @@ const SpotTradingPage = () => {
         </div>
       ) : (
         <div className="tab-content">{renderTabContent()}</div>
+      )}
+      {/* Notifications */}
+      {(success || error) && (
+        <div className={`notification-toast ${success ? 'success' : 'error'}`}>
+          {success ? <FiArrowUpCircle /> : <FiX />}
+          <span>{success || error}</span>
+          <button onClick={() => { setSuccess(null); setError(null); }}><FiX /></button>
+        </div>
       )}
     </div>
   );

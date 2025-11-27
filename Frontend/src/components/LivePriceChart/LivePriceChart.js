@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, Cell, ReferenceLine } from 'recharts';
+import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import cryptoWebSocket from '../../services/cryptoWebSocket';
 import binanceAPI from '../../services/binanceAPI';
 import './LivePriceChart.css';
@@ -14,7 +14,7 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
   // Paging state and windowed view
   const [isHistoryMode, setIsHistoryMode] = useState(false); // true when viewing older pages
   const [viewStartIdx, setViewStartIdx] = useState(0); // start index of visible window in buffer
-  
+
   const intervalRef = useRef(null);
   const lastPriceRef = useRef(null);
   const mountedRef = useRef(true);
@@ -44,7 +44,7 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
         const maxLen = timeframe === '1W' ? 52 : timeframe === '1D' ? 90 : 100;
         const nextTs = lastCandle.timestamp + intervalMs;
         const label = new Date(nextTs).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-        
+
         const newCandle = {
           time: label,
           timestamp: nextTs,
@@ -60,7 +60,7 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
         return appended.length > maxLen ? appended.slice(appended.length - maxLen) : appended;
       }
 
-  // Otherwise, update only the last candle values
+      // Otherwise, update only the last candle values
       const newClose = price;
       const newHigh = Math.max(lastCandle.high, price);
       const newLow = Math.min(lastCandle.low, price);
@@ -85,12 +85,12 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
     if (showLoading && mountedRef.current) {
       setIsLoading(true);
     }
-    
+
     try {
       const interval = binanceAPI.timeframeToInterval(timeframe);
       const limit = timeframe === '1D' ? 90 : timeframe === '1W' ? 52 : 100;
       const klines = await binanceAPI.getKlines(symbol, interval, limit);
-      
+
       if (mountedRef.current && Array.isArray(klines)) {
         if (klines.length > 0) {
           if (showLoading) {
@@ -109,7 +109,7 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
             });
           }
         }
-        
+
         // Only fetch stats on initial load
         if (showLoading) {
           const stats = await binanceAPI.get24hStats(symbol);
@@ -119,7 +119,7 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
               percent: stats.priceChangePercent,
             });
           }
-          
+
           const price = await binanceAPI.getCurrentPrice(symbol);
           if (price && mountedRef.current) {
             setCurrentPrice(price);
@@ -140,11 +140,11 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
   useEffect(() => {
     mountedRef.current = true;
     initialLoadRef.current = false;
-    
+
     loadCandleData(true); // Show loading
-  setIsHistoryMode(false);
-  setViewStartIdx(0);
-    
+    setIsHistoryMode(false);
+    setViewStartIdx(0);
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -158,9 +158,9 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    
+
     const refreshInterval = timeframe === '1D' ? 1200000 : 1800000;
-    
+
     intervalRef.current = setInterval(() => {
       loadCandleData(false); // Silent reload - NO loading state
     }, refreshInterval);
@@ -181,10 +181,10 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
     const handlePrice = (data) => {
       if (!mountedRef.current) return;
       if (isHistoryMode) return; // pause live extension while viewing history
-      
+
       const price = parseFloat(data.price);
       if (isNaN(price)) return;
-      
+
       setCurrentPrice(price);
       setIsConnected(true);
       updateLastCandle(price, data.timestamp); // Pass timestamp for correct bucketing
@@ -218,9 +218,9 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
 
   const formatPrice = (price) => {
     if (!price) return '0.00';
-    return price.toLocaleString('en-US', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
+    return price.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     });
   };
 
@@ -311,18 +311,18 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
         </div>
       </div>
 
-  {/* Chart area - ALWAYS render ResponsiveContainer */}
+      {/* Chart area - ALWAYS render ResponsiveContainer */}
       <div style={{ position: 'relative', height: height - 80 }}>
         {/* Loading overlay */}
         {isLoading && (
-          <div style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
-            display: 'flex', 
-            alignItems: 'center', 
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
             background: 'rgba(0,0,0,0.5)',
             zIndex: 10
@@ -333,137 +333,137 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
             </div>
           </div>
         )}
-        
+
         {/* Chart - Always mounted */}
         {visibleData && visibleData.length > 0 ? (
-      <ResponsiveContainer width="100%" height={height - 80}>
-        <ComposedChart data={visibleData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }} isAnimationActive={false}>
-          <defs>
-            <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="rgba(90, 200, 250, 0.4)" stopOpacity={0.8}/>
-              <stop offset="95%" stopColor="rgba(90, 200, 250, 0.1)" stopOpacity={0.1}/>
-            </linearGradient>
-          </defs>
-          
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-          
-          <XAxis 
-            dataKey="time" 
-            stroke="rgba(255,255,255,0.5)"
-            tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.7)' }}
-            tickLine={false}
-            axisLine={false}
-            allowDuplicatedCategory={false}
-          />
-          
-          <YAxis 
-            yAxisId="candle"
-            orientation="right"
-            domain={['dataMin - 100', 'dataMax + 100']}
-            stroke="rgba(255,255,255,0.5)"
-            tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.7)' }}
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(value) => `$${value.toFixed(0)}`}
-          />
-          
-          <Tooltip 
-            content={({ active, payload }) => {
-              if (active && payload && payload.length > 0) {
-                const data = payload[0].payload;
-                return (
-                  <div style={{
-                    background: 'rgba(20, 20, 22, 0.98)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
-                  }}>
-                    <div style={{ color: '#fff', fontWeight: '600', marginBottom: '8px' }}>{data.time}</div>
-                    <div style={{ color: '#26a69a', padding: '2px 0' }}>Mở: ${formatPrice(data.open)}</div>
-                    <div style={{ color: '#5AC8FA', padding: '2px 0' }}>Cao: ${formatPrice(data.high)}</div>
-                    <div style={{ color: '#FF9500', padding: '2px 0' }}>Thấp: ${formatPrice(data.low)}</div>
-                    <div style={{ color: data.close >= data.open ? '#26a69a' : '#ef5350', padding: '2px 0', fontWeight: '600' }}>
-                      Đóng: ${formatPrice(data.close)}
-                    </div>
-                    <div style={{ color: 'rgba(255,255,255,0.6)', padding: '2px 0', fontSize: '12px' }}>
-                      Vol: {(data.volume / 1000).toFixed(2)}K
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            }}
-            cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
-          />
-          
-          <Bar yAxisId="candle" dataKey="high" fill="transparent" />
-          <Bar yAxisId="candle" dataKey="low" fill="transparent" />
-          <Bar yAxisId="candle" dataKey="open" fill="transparent" />
-          <Bar yAxisId="candle" dataKey="close" fill="transparent" />
-          
-          <Line 
-            yAxisId="candle"
-            type="monotone"
-            dataKey="close"
-            stroke="transparent"
-            isAnimationActive={false}
-            dot={(props) => {
-              const { cx, cy, payload, index } = props;
-              if (!payload || !payload.open || !payload.close || !payload.high || !payload.low) return null;
-              
-              const { open, close, high, low } = payload;
-              const isUp = close >= open;
-              const color = isUp ? '#26a69a' : '#ef5350';
-              
-              if (!visibleData || visibleData.length === 0) return null;
-              
-              const dataMax = Math.max(...visibleData.map(d => d.high));
-              const dataMin = Math.min(...visibleData.map(d => d.low));
-              const priceRange = dataMax - dataMin;
-              
-              if (priceRange === 0) return null;
-              const heightRange = height - 40;
-              const pixelPerPrice = heightRange / priceRange;
-              
-              const yHigh = cy - ((high - close) * pixelPerPrice);
-              const yLow = cy + ((close - low) * pixelPerPrice);
-              const yOpen = cy - ((open - close) * pixelPerPrice);
-              
-              const bodyTop = Math.min(cy, yOpen);
-              const bodyHeight = Math.max(Math.abs(cy - yOpen), 2);
-              const barWidth = 8;
-              
-              return (
-                <g key={`candle-${index}`}>
-                  <line
-                    x1={cx}
-                    y1={yHigh}
-                    x2={cx}
-                    y2={yLow}
-                    stroke={color}
-                    strokeWidth={1.5}
-                  />
-                  <rect
-                    x={cx - barWidth / 2}
-                    y={bodyTop}
-                    width={barWidth}
-                    height={bodyHeight}
-                    fill={color}
-                    stroke={color}
-                    strokeWidth={1}
-                  />
-                </g>
-              );
-            }}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={height - 80}>
+            <ComposedChart data={visibleData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }} isAnimationActive={false}>
+              <defs>
+                <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="rgba(90, 200, 250, 0.4)" stopOpacity={0.8} />
+                  <stop offset="95%" stopColor="rgba(90, 200, 250, 0.1)" stopOpacity={0.1} />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+
+              <XAxis
+                dataKey="time"
+                stroke="rgba(255,255,255,0.5)"
+                tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.7)' }}
+                tickLine={false}
+                axisLine={false}
+                allowDuplicatedCategory={false}
+              />
+
+              <YAxis
+                yAxisId="candle"
+                orientation="right"
+                domain={['dataMin - 100', 'dataMax + 100']}
+                stroke="rgba(255,255,255,0.5)"
+                tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.7)' }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => `$${value.toFixed(0)}`}
+              />
+
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length > 0) {
+                    const data = payload[0].payload;
+                    return (
+                      <div style={{
+                        background: 'rgba(20, 20, 22, 0.98)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+                      }}>
+                        <div style={{ color: '#fff', fontWeight: '600', marginBottom: '8px' }}>{data.time}</div>
+                        <div style={{ color: '#26a69a', padding: '2px 0' }}>Mở: ${formatPrice(data.open)}</div>
+                        <div style={{ color: '#5AC8FA', padding: '2px 0' }}>Cao: ${formatPrice(data.high)}</div>
+                        <div style={{ color: '#FF9500', padding: '2px 0' }}>Thấp: ${formatPrice(data.low)}</div>
+                        <div style={{ color: data.close >= data.open ? '#26a69a' : '#ef5350', padding: '2px 0', fontWeight: '600' }}>
+                          Đóng: ${formatPrice(data.close)}
+                        </div>
+                        <div style={{ color: 'rgba(255,255,255,0.6)', padding: '2px 0', fontSize: '12px' }}>
+                          Vol: {(data.volume / 1000).toFixed(2)}K
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+                cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
+              />
+
+              <Bar yAxisId="candle" dataKey="high" fill="transparent" />
+              <Bar yAxisId="candle" dataKey="low" fill="transparent" />
+              <Bar yAxisId="candle" dataKey="open" fill="transparent" />
+              <Bar yAxisId="candle" dataKey="close" fill="transparent" />
+
+              <Line
+                yAxisId="candle"
+                type="monotone"
+                dataKey="close"
+                stroke="transparent"
+                isAnimationActive={false}
+                dot={(props) => {
+                  const { cx, cy, payload, index } = props;
+                  if (!payload || !payload.open || !payload.close || !payload.high || !payload.low) return null;
+
+                  const { open, close, high, low } = payload;
+                  const isUp = close >= open;
+                  const color = isUp ? '#26a69a' : '#ef5350';
+
+                  if (!visibleData || visibleData.length === 0) return null;
+
+                  const dataMax = Math.max(...visibleData.map(d => d.high));
+                  const dataMin = Math.min(...visibleData.map(d => d.low));
+                  const priceRange = dataMax - dataMin;
+
+                  if (priceRange === 0) return null;
+                  const heightRange = height - 40;
+                  const pixelPerPrice = heightRange / priceRange;
+
+                  const yHigh = cy - ((high - close) * pixelPerPrice);
+                  const yLow = cy + ((close - low) * pixelPerPrice);
+                  const yOpen = cy - ((open - close) * pixelPerPrice);
+
+                  const bodyTop = Math.min(cy, yOpen);
+                  const bodyHeight = Math.max(Math.abs(cy - yOpen), 2);
+                  const barWidth = 8;
+
+                  return (
+                    <g key={`candle-${index}`}>
+                      <line
+                        x1={cx}
+                        y1={yHigh}
+                        x2={cx}
+                        y2={yLow}
+                        stroke={color}
+                        strokeWidth={1.5}
+                      />
+                      <rect
+                        x={cx - barWidth / 2}
+                        y={bodyTop}
+                        width={barWidth}
+                        height={bodyHeight}
+                        fill={color}
+                        stroke={color}
+                        strokeWidth={1}
+                      />
+                    </g>
+                  );
+                }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
         ) : (
-          <div style={{ 
-            height: '100%', 
-            display: 'flex', 
-            alignItems: 'center', 
+          <div style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
             color: 'rgba(255,255,255,0.5)'
           }}>
@@ -497,7 +497,7 @@ const LivePriceChart = React.memo(({ symbol = 'BTCUSDT', height = 400 }) => {
       {/* Footer */}
       <div className="chart-footer">
         <span className="chart-info">
-          {visibleData && visibleData.length > 0 
+          {visibleData && visibleData.length > 0
             ? `${visibleData.length} nến hiển thị • Cập nhật ${new Date().toLocaleTimeString()}`
             : 'Waiting for data...'
           }

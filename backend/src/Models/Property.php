@@ -46,8 +46,17 @@ class Property
                 average_buy_price = VALUES(average_buy_price),
                 unit_number = VALUES(unit_number)
         ");
-        
-        return $stmt->execute([$walletId, $symbol, $averageBuyPrice, $unitNumbers]);
+        try {
+            $success = $stmt->execute([$walletId, $symbol, $averageBuyPrice, $unitNumbers]);
+            if ($success) {
+                return true;
+            }
+            $err = $stmt->errorInfo();
+            throw new \RuntimeException('Property create failed: ' . json_encode($err));
+        } catch (\Throwable $e) {
+            // rethrow so caller (controller) can log and rollback
+            throw $e;
+        }
     }
 
     public function updateUnitNumber(int $walletId, string $symbol, float $delta): bool

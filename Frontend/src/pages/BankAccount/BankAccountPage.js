@@ -30,6 +30,35 @@ const BankAccountPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  const handleLookupAccount = async (accountNumber, bankName) => {
+    if (!accountNumber) return;
+
+    try {
+      setLookupLoading(true);
+      // Only pass bankName if it has a value
+      const response = await bankAPI.lookupAccount(accountNumber, bankName || undefined);
+
+      if (response.success && response.data) {
+        setTransferData(prev => ({
+          ...prev,
+          recipientName: response.data.account_name,
+          // If backend returns a bank name and we didn't have one, or to correct it
+          toBankName: response.data.bank_name || prev.toBankName
+        }));
+      } else {
+        setTransferData(prev => ({ ...prev, recipientName: '' }));
+        // Don't show error immediately on blur if just typing, maybe show small text
+      }
+    } catch (err) {
+      console.error('Lookup failed:', err);
+      setTransferData(prev => ({ ...prev, recipientName: '' }));
+      // Optional: setTimedError('Không tìm thấy tài khoản');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   const totalBalance = bankAccounts.reduce(
     (sum, account) => sum + parseFloat(account.account_balance || 0),
@@ -105,7 +134,7 @@ const BankAccountPage = () => {
         userId,
         newAccountData.account_number,
         newAccountData.bank_name,
-        0
+        null // Pass null to use backend default (100,000,000 VND)
       );
 
       if (response.success) {
@@ -247,7 +276,7 @@ const BankAccountPage = () => {
             <FiSend /> Chuyển khoản
           </button>
           <button className="btn btn-primary" onClick={handleAddAccount}>
-            <FiPlus /> Thêm tài khoản
+            <FiPlus /> Liên kết tài khoản
           </button>
         </div>
       </div>
@@ -339,7 +368,7 @@ const BankAccountPage = () => {
 
             <div className="add-bank-card" onClick={handleAddAccount}>
               <FiPlus size={40} />
-              <span>Thêm tài khoản mới</span>
+              <span>Liên kết tài khoản mới</span>
             </div>
           </div>
 
@@ -404,15 +433,54 @@ const BankAccountPage = () => {
               </div>
 
               <div className="form-group">
-                <label>Đến tài khoản</label>
+                <label>Ngân hàng thụ hưởng</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Nhập số tài khoản đích"
-                  value={transferData.toAccount}
-                  onChange={(e) => setTransferData({ ...transferData, toAccount: e.target.value })}
+                  placeholder="Nhập tên ngân hàng (VD: Vietcombank)"
+                  value={transferData.toBankName || ''}
+                  onChange={(e) => {
+                    setTransferData({ ...transferData, toBankName: e.target.value });
+                    // Reset recipient name when bank changes
+                    if (transferData.recipientName) {
+                      setTransferData(prev => ({ ...prev, recipientName: '' }));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (transferData.toAccount && transferData.toBankName) {
+                      handleLookupAccount(transferData.toAccount, transferData.toBankName);
+                    }
+                  }}
                   required
                 />
+              </div>
+
+              <div className="form-group">
+                <label>Số tài khoản thụ hưởng</label>
+                <div className="input-wrapper">
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Nhập số tài khoản đích"
+                    value={transferData.toAccount}
+                    onChange={(e) => {
+                      setTransferData({ ...transferData, toAccount: e.target.value, recipientName: '' });
+                    }}
+                    onBlur={() => {
+                      if (transferData.toAccount) {
+                        handleLookupAccount(transferData.toAccount, transferData.toBankName);
+                      }
+                    }}
+                    required
+                  />
+                  {lookupLoading && <span className="input-loading">Đang kiểm tra...</span>}
+                </div>
+                {transferData.recipientName && (
+                  <div className="recipient-info">
+                    <span className="label">Người thụ hưởng:</span>
+                    <span className="value">{transferData.recipientName}</span>
+                  </div>
+                )}
               </div>
 
               <div className="form-group">
@@ -443,7 +511,7 @@ const BankAccountPage = () => {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowTransferModal(false)}>
                   Hủy
                 </button>
-                <button type="submit" className="btn btn-primary btn-gradient" disabled={loading}>
+                <button type="submit" className="btn btn-primary btn-gradient" disabled={loading || !transferData.recipientName}>
                   <FiSend /> {loading ? 'Đang xử lý...' : 'Chuyển khoản'}
                 </button>
               </div>

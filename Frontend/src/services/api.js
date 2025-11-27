@@ -45,17 +45,17 @@ api.interceptors.response.use(
     if (error.request) {
       // Request made but no response received
       console.error('Network Error:', error.message);
-      return Promise.reject({ 
-        success: false, 
-        message: 'Khong the ket noi den server. Vui long kiem tra ket noi mang.' 
+      return Promise.reject({
+        success: false,
+        message: 'Khong the ket noi den server. Vui long kiem tra ket noi mang.'
       });
     }
 
     // Something else happened in setting up the request
     console.error('Error:', error.message);
-    return Promise.reject({ 
-      success: false, 
-      message: error.message || 'Da xay ra loi khong xac dinh' 
+    return Promise.reject({
+      success: false,
+      message: error.message || 'Da xay ra loi khong xac dinh'
     });
   }
 );
@@ -137,6 +137,18 @@ export const walletAPI = {
     const response = await api.post('/wallet', {
       user_id: userId,
       type: type, // 'fund', 'spot', 'future'
+    });
+    return response.data;
+  },
+
+  // Internal Transfer
+  internalTransfer: async (userId, { fromType, toType, amount, note }) => {
+    const response = await api.post('/wallet/internal-transfer', {
+      user_id: userId,
+      from_type: fromType,
+      to_type: toType,
+      amount,
+      note,
     });
     return response.data;
   },
@@ -302,6 +314,15 @@ export const bankAPI = {
   // Delete bank account
   deleteAccount: async (userId, accountNumber) => {
     const response = await api.delete(`/bank/${accountNumber}?user_id=${userId}`);
+    return response.data;
+  },
+
+  // Lookup bank account
+  lookupAccount: async (accountNumber, bankName) => {
+    const response = await api.post('/bank/lookup', {
+      account_number: accountNumber,
+      bank_name: bankName,
+    });
     return response.data;
   },
 };

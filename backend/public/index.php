@@ -53,5 +53,16 @@ foreach ($routes as $routeFile) {
     }
 }
 
+// Optional: Run migrations automatically in development when AUTO_MIGRATE env var set to 'true'
+if (isset($_ENV['AUTO_MIGRATE']) && $_ENV['AUTO_MIGRATE'] === 'true') {
+    try {
+        // run_migrations.php uses the project's autoload and Database helper
+        require __DIR__ . '/../scripts/run_migrations.php';
+    } catch (\Throwable $e) {
+        error_log('Auto-migrate failed: ' . $e->getMessage());
+        // Do not halt the app in production; migrations are best-effort here
+    }
+}
+
 // Run app
 $app->run();

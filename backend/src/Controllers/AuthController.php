@@ -49,6 +49,17 @@ class AuthController
             return Response::error($response, 'Failed to create user', 500);
         }
 
+        // If user is merchant, create default bank account
+        if (isset($data['role']) && $data['role'] === 'merchant') {
+            $bankModel = new \App\Models\BankAccount();
+            $bankModel->create([
+                'account_number' => 'MERCHANT-' . time(), // Generate unique account number
+                'bank_name' => 'Merchant Default Bank',
+                'user_id' => $userId,
+                'account_balance' => 100000000 // 100M VND default
+            ]);
+        }
+
         $user = $userModel->findById($userId);
         unset($user['password_hash']);
 

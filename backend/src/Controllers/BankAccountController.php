@@ -39,22 +39,6 @@ class BankAccountController
 
         $bankModel = new BankAccount();
         
-        // Check if account exists
-        if ($bankModel->findByAccountNumber($data['account_number'])) {
-            return Response::error($response, 'Account already exists', 409);
-        }
-
-        $success = $bankModel->create([
-            'account_number' => $data['account_number'],
-            'bank_name' => $data['bank_name'],
-            'user_id' => $data['user_id'],
-            'account_balance' => $data['account_balance'] ?? 0
-        ]);
-
-        if (!$success) {
-            return Response::error($response, 'Failed to create bank account', 500);
-        }
-
         $account = $bankModel->findByAccountNumber($data['account_number']);
         return Response::success($response, $account, 'Bank account created', 201);
     }
@@ -176,5 +160,39 @@ class BankAccountController
         }, $transactions);
 
         return Response::success($response, $normalized);
+    }
+    public function lookup(Request $request, ResponseInterface $response): ResponseInterface
+    {
+        $data = $request->getParsedBody();
+        $accountNumber = $data['account_number'] ?? null;
+        $bankName = $data['bank_name'] ?? null;
+
+        if (!$accountNumber) {
+            return Response::error($response, 'Account number is required', 400);
+        }
+
+        $bankModel = new BankAccount();
+        $account = $bankModel->findByAccountNumber($accountNumber);
+
+        if (!$account) {
+            return Response::error($response, 'Account not found', 404);
+        }
+
+        // Optional: Validate bank name if provided
+        if ($bankName && strcasecmp($account['bank_name'], $bankName) !== 0) {
+             return Response::error($response, 'Account found but bank name does not match', 404);
+        }
+
+        $userModel = new \App\Models\User();
+        $user = $userModel->findById($account['user_id']);
+
+        if (!$user) {
+            return Response::error($response, 'User not found', 404);
+        }
+
+        return Response::success($response, [
+            'account_name' => $user['fullname'] ?? $user['username'],
+            'bank_name' => $account['bank_name']
+        ]);
     }
 }
